@@ -67,6 +67,29 @@ pmcli <flags...> [action] <args...>
 """)
 
 
+def PrintHuman(dictionary, ident = '', braces=1):
+    for key, value in dictionary.iteritems():
+        if isinstance(value, dict):
+            print '%s%s%s%s' % (ident, braces*'[', key, braces*']')
+            PrintHuman(value, ident+'  ', braces+1)
+        elif isinstance(value, list):
+            ndict=0
+            for v in value:
+                if isinstance(v, dict):
+                    ndict += 1
+            if ndict:
+                print '%s%s' % (ident, key)
+                for e in value:
+                    if isinstance(e, dict):
+                        PrintHuman(e, ident+'  ', braces+1)
+                    else:
+                         print ident+'%s : %s' %(key, e)
+            else:
+                print ident+'%s : %s' %(key, value)
+        else:
+            print ident+'%s : %s' %(key, value)
+
+
 def getconfig(arguments):
     configfile = os.path.expanduser("~/.pmcli.cfg")
     if '-c' in arguments:
@@ -133,7 +156,7 @@ def printoutput(result, outputformat):
     elif outputformat == 'jsonpp':
         print(json.dumps(result.json(), indent=2))
     elif outputformat == 'human':
-        pass
+        PrintHuman(result.json())
     elif outputformat == 'raw':
         print(result.text)
 
@@ -144,8 +167,8 @@ def listapps(host, authentication, username, password, outputformat):
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
-        return False
-    printoutput(resp,outputformat)
+        sys.exit(2)
+    printoutput(resp, outputformat)
 
 
 def listappid(id, host, authentication, username, password, outputformat):
@@ -154,10 +177,8 @@ def listappid(id, host, authentication, username, password, outputformat):
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
-        return False
-
-
-    printoutput(resp,outputformat)
+        sys.exit(2)
+    printoutput(resp, outputformat)
 
 
 def listappversions(id, host, authentication, username, password, outputformat):
@@ -166,12 +187,47 @@ def listappversions(id, host, authentication, username, password, outputformat):
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
-        return False
-    except IndexError:
-        print(u'You must supply and application index')
-        printusage()
         sys.exit(2)
-    printoutput(resp,outputformat)
+    printoutput(resp, outputformat)
+
+
+def createapp(filename, host, authentication, username, password, outputformat):
+    try:
+        content = open(filename,'rb').read()
+        resp = requests.post('http://' + host + ':8080/v2/apps/', data=content)
+    except requests.exceptions.ConnectionError as e:
+        print(u'Error connecting to host')
+        print(e[0][1])
+        sys.exit(2)
+    except IOError as e:
+        if e.errno == 2:
+            print(u'file name ' + filename + u' not found')
+            sys.exit(2)
+        if e.errno == 13:
+            print(u'No read permission in file ' + filename)
+            sys.exit(2)
+
+    printoutput(resp, outputformat)
+
+
+def destroyapp(id, host, authentication, username, password, outputformat):
+    try:
+        resp = requests.delete('http://' + host + ':8080/v2/apps/' + id)
+    except requests.exceptions.ConnectionError as e:
+        print(u'Error connecting to host')
+        print(e[0][1])
+        sys.exit(2)
+    printoutput(resp, outputformat)
+
+
+def restartapp(id, host, authentication, username, password, outputformat):
+    try:
+        resp = requests.post('http://' + host + ':8080/v2/apps/' + id + '/restart')
+    except requests.exceptions.ConnectionError as e:
+        print(u'Error connecting to host')
+        print(e[0][1])
+        sys.exit(2)
+    printoutput(resp, outputformat)
 
 # MAIN
 
@@ -196,24 +252,40 @@ if 'app' in sys.argv:
         try:
             listappversions(arg[1], host, authentication, username, password, outputformat)
         except IndexError:
-            print(u'You must supply and application index')
+            print(u'You must supply an application index')
             printusage()
             sys.exit(2)
     elif arg[0].lower() == 'show':
         try:
             listappid(arg[1], host, authentication, username, password, outputformat)
         except IndexError:
-            print(u'You must supply and application index')
+            print(u'You must supply an application index')
             printusage()
             sys.exit(2)
     elif arg[0].lower() == 'create':
+        try:
+            createapp(arg[1], host, authentication, username, password, outputformat)
+        except IndexError:
+            print(u'You must supply a file name')
+            printusage()
+            sys.exit(2)
         pass
     elif arg[0].lower() == 'update':
         pass
     elif arg[0].lower() == 'restart':
-        pass
+        try:
+            restartapp(arg[1], host, authentication, username, password, outputformat)
+        except IndexError:
+            print(u'You must supply an application index')
+            printusage()
+            sys.exit(2)
     elif arg[0].lower() == 'destroy':
-        pass
+        try:
+            destroyapp(arg[1], host, authentication, username, password, outputformat)
+        except IndexError:
+            print(u'You must supply an application index')
+            printusage()
+            sys.exit(2)
     else:
         print(u'No proper argument to \'app\' action detected')
         printusage()
