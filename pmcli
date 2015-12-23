@@ -1,0 +1,302 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+Marathon CLI based on marathonctl written in python
+"""
+import sys
+import os
+import ConfigParser
+import requests
+import pdb
+import json
+
+__author__ = "Iván Renedo"
+__copyright__ = "GPL"
+
+
+def printusage():
+    print("""
+pmcli <flags...> [action] <args...>
+ Actions
+    app
+       list                      - list all apps
+       versions [id]             - list all versions of apps of id
+       show [id]                 - show config and status of app of id (latest version)
+       show [id] [version]       - show config and status of app of id and version
+       create [jsonfile]         - deploy application defined in jsonfile
+       update [id] [jsonfile]    - update application id as defined in jsonfile
+       update cpu [id] [cpu%]    - update application id to have cpu% of cpu share
+       update memory [id] [MB]   - update application id to have MB of memory
+       update instances [id] [N] - update application id to have N instances
+       restart [id]              - restart app of id
+       destroy [id]              - destroy and remove all instances of id
+
+    task
+       list               - list all tasks
+       list [id]          - list tasks of app of id
+       kill [id]          - kill all tasks of app id
+       kill [id] [taskid] - kill task taskid of app id
+       queue              - list all queued tasks
+
+    group
+       list                        - list all groups
+       list [groupid]              - list groups in groupid
+       create [jsonfile]           - create a group defined in jsonfile
+       update [groupid] [jsonfile] - update group groupid as defined in jsonfile
+       destroy [groupid]           - destroy group of groupid
+
+    deploy
+       list               - list all active deploys
+       destroy [deployid] - cancel deployment of [deployid]
+
+    marathon
+       leader   - get the current Marathon leader
+       abdicate - force the current leader to relinquish control
+       ping     - ping Marathon master host[s]
+
+ Flags
+  -c [config file]
+  -h [host]
+  -u [user:password] (separated by colon)
+  -p [profile] (profile used in the config file)
+  -f [format]
+       human  (simplified columns, default)
+       json   (json on one line)
+       jsonpp (json pretty printed)
+       raw    (the exact response from Marathon)
+""")
+
+
+def getconfig(arguments):
+    configfile = os.path.expanduser("~/.pmcli.cfg")
+    if '-c' in arguments:
+        idx = arguments.index('-c')
+        configfile = arguments[idx+1]
+
+    try:
+        f = open(configfile, 'r')
+        f.close()
+    except (OSError, IOError) as e:
+        if e.errno == 2:
+            print(u'Config file ' + configfile + u' not found\n')
+            sys.exit(2)
+        if e.errno == 13:
+            print(u'Read permission error in ' + configfile + u'\n')
+            sys.exit(2)
+
+    mesosprofile = 'default'
+    if '-p' in sys.argv:
+        index = sys.argv.index('-p')
+        mesosprofile = sys.argv[index+1]
+    cfg = ConfigParser.ConfigParser()
+    cfg.read(configfile)
+
+    try:
+        host = cfg.get(mesosprofile, 'host')
+        authentication = cfg.get(mesosprofile, 'authentication')
+        username = cfg.get(mesosprofile, 'user')
+        password = cfg.get(mesosprofile, 'password')
+        outputformat = cfg.get(mesosprofile, 'format')
+    except ConfigParser.NoOptionError as e:
+        print(u'Syntax error en configfile-> ' + str(e))
+        sys.exit(2)
+
+    if '-h' in arguments:
+        idx = arguments.index('-h')
+        host = arguments[idx+1]
+
+    if '-u' in arguments:
+        idx = arguments.index('-u')
+        userpass = arguments[idx+1]
+        try:
+            username, password = userpass.split(':')
+        except:
+            print(u'there was some error reading you username and password.\n '
+                  u'Check is in correct \'username:password\' format')
+            printusage()
+            sys.exit(2)
+
+    if '-f' in arguments:
+        idx = arguments.index('-f')
+        outputformat = arguments[idx+1]
+        if outputformat not in ['json', 'human', 'jsonpp', 'raw']:
+            print(u'Unknown output format [\'json\', \'human\', \'jsonpp\', \'raw\']')
+            printusage()
+            sys.exit(2)
+
+    return[host, authentication, username, password, outputformat]
+
+
+def printoutput(result, outputformat):
+    if outputformat == 'json':
+        print(result.json())
+    elif outputformat == 'jsonpp':
+        print(json.dumps(result.json(), indent=2))
+    elif outputformat == 'human':
+        pass
+    elif outputformat == 'raw':
+        print(result.text)
+
+
+def listapps(host, authentication, username, password, outputformat):
+    try:
+        resp = requests.get('http://' + host + ':8080/v2/apps/')
+    except requests.exceptions.ConnectionError as e:
+        print(u'Error connecting to host')
+        print(e[0][1])
+        return False
+    printoutput(resp,outputformat)
+
+
+def listappid(id, host, authentication, username, password, outputformat):
+    try:
+        resp = requests.get('http://' + host + ':8080/v2/apps/' + id)
+    except requests.exceptions.ConnectionError as e:
+        print(u'Error connecting to host')
+        print(e[0][1])
+        return False
+
+
+    printoutput(resp,outputformat)
+
+
+def listappversions(id, host, authentication, username, password, outputformat):
+    try:
+        resp = requests.get('http://' + host + ':8080/v2/apps/' + id + '/versions')
+    except requests.exceptions.ConnectionError as e:
+        print(u'Error connecting to host')
+        print(e[0][1])
+        return False
+    except IndexError:
+        print(u'You must supply and application index')
+        printusage()
+        sys.exit(2)
+    printoutput(resp,outputformat)
+
+# MAIN
+
+if len(sys.argv) <= 1:
+    print("Incorrect number of arguments")
+    printusage()
+    sys.exit(2)
+
+host, authentication, username, password, outputformat = getconfig(sys.argv)
+
+if 'app' in sys.argv:
+    idx = sys.argv.index('app')
+    arg = sys.argv[idx+1:]
+    if not arg:
+        print(u'Action \'app\' has no arguments')
+        printusage()
+        sys.exit(2)
+
+    if arg[0].lower() == 'list':
+        listapps(host, authentication, username, password, outputformat)
+    elif arg[0].lower() == 'versions':
+        try:
+            listappversions(arg[1], host, authentication, username, password, outputformat)
+        except IndexError:
+            print(u'You must supply and application index')
+            printusage()
+            sys.exit(2)
+    elif arg[0].lower() == 'show':
+        try:
+            listappid(arg[1], host, authentication, username, password, outputformat)
+        except IndexError:
+            print(u'You must supply and application index')
+            printusage()
+            sys.exit(2)
+    elif arg[0].lower() == 'create':
+        pass
+    elif arg[0].lower() == 'update':
+        pass
+    elif arg[0].lower() == 'restart':
+        pass
+    elif arg[0].lower() == 'destroy':
+        pass
+    else:
+        print(u'No proper argument to \'app\' action detected')
+        printusage()
+        sys.exit(2)
+
+elif 'task' in sys.argv:
+    idx = sys.argv.index('task')
+    arg = sys.argv[idx+1:].lower()
+    if not arg:
+        print(u'Action \'task\' has no arguments')
+        printusage()
+        sys.exit(2)
+
+    if arg[0].lower() == 'list':
+        pass
+    elif arg[0].lower() == 'kill':
+        pass
+    elif arg[0].lower() == 'queue':
+        pass
+    else:
+        print(u'No proper argument to \'task\' action detected')
+        printusage()
+        sys.exit(2)
+
+elif 'group' in sys.argv:
+    idx = sys.argv.index('group')
+    arg = sys.argv[idx+1:].lower()
+    if not arg:
+        print(u'Action \'group\' has no arguments')
+        printusage()
+        sys.exit(2)
+
+    if arg[0].lower() == 'list':
+        pass
+    elif arg[0].lower() == 'create':
+        pass
+    elif arg[0].lower() == 'update':
+        pass
+    elif arg[0].lower() == 'destroy':
+        pass
+    else:
+        print(u'No proper argument to \'group\' action detected')
+        printusage()
+        sys.exit(2)
+
+elif 'deploy' in sys.argv:
+    idx = sys.argv.index('deploy')
+    arg = sys.argv[idx+1:].lower()
+    if not arg:
+        print(u'Action \'deploy\' has no arguments')
+        printusage()
+        sys.exit(2)
+
+    if arg[0].lower() == 'list':
+        pass
+    elif arg[0].lower() == 'destroy':
+        pass
+    else:
+        print(u'No proper argument to \'deploy\' action detected')
+        printusage()
+        sys.exit(2)
+
+elif 'marathon' in sys.argv:
+    idx = sys.argv.index('marathon')
+    arg = sys.argv[idx+1:].lower()
+    if not arg:
+        print(u'Action \'marathon\' has no arguments')
+        printusage()
+        sys.exit(2)
+
+    if arg[0].lower() == 'leader':
+        pass
+    elif arg[0].lower() == 'abdicate':
+        pass
+    elif arg[0].lower() == 'pass':
+        pass
+    else:
+        print(u'No proper argument to \'marathon\' action detected')
+        printusage()
+        sys.exit(2)
+else:
+    print(u'No proper action detected')
+    printusage()
+    sys.exit(2)
+
+sys.exit(0)
