@@ -5,6 +5,7 @@ Marathon CLI based on marathonctl written in python
 """
 import sys
 import os
+import termios
 import ConfigParser
 import requests
 import pdb
@@ -67,6 +68,22 @@ pmcli <flags...> [action] <args...>
 """)
 
 
+def getch():
+    '''
+    Get one character from stdin
+    :return: char
+    '''
+    old_settings = termios.tcgetattr(0)
+    new_settings = old_settings[:]
+    new_settings[3] &= ~termios.ICANON
+    try:
+        termios.tcsetattr(0, termios.TCSANOW, new_settings)
+        ch = sys.stdin.read(1)
+    finally:
+        termios.tcsetattr(0, termios.TCSANOW, old_settings)
+    return ch
+
+
 def PrintHuman(dictionary, ident = '', braces=1):
     for key, value in dictionary.iteritems():
         if isinstance(value, dict):
@@ -91,6 +108,7 @@ def PrintHuman(dictionary, ident = '', braces=1):
 
 
 def getconfig(arguments):
+    opts = {'host': ' ', 'authentication': 0, 'username': '', 'password': '', 'outputformat': 'human'}
     configfile = os.path.expanduser("~/.pmcli.cfg")
     if '-c' in arguments:
         idx = arguments.index('-c')
@@ -115,24 +133,28 @@ def getconfig(arguments):
     cfg.read(configfile)
 
     try:
-        host = cfg.get(mesosprofile, 'host')
-        authentication = cfg.get(mesosprofile, 'authentication')
-        username = cfg.get(mesosprofile, 'user')
-        password = cfg.get(mesosprofile, 'password')
-        outputformat = cfg.get(mesosprofile, 'format')
+        opts['host'] = cfg.get(mesosprofile, 'host')
+        opts['authentication'] = cfg.get(mesosprofile, 'authentication')
+        opts['username'] = cfg.get(mesosprofile, 'user')
+        opts['password'] = cfg.get(mesosprofile, 'password')
+        opts['outputformat'] = cfg.get(mesosprofile, 'format')
     except ConfigParser.NoOptionError as e:
         print(u'Syntax error en configfile-> ' + str(e))
+        sys.exit(2)
+    except ConfigParser.NoSectionError as e:
+        print(u'Profile \"' + mesosprofile + u'\" doesn\'t exists in file ' + configfile)
         sys.exit(2)
 
     if '-h' in arguments:
         idx = arguments.index('-h')
-        host = arguments[idx+1]
+        opts['host'] = arguments[idx+1]
 
     if '-u' in arguments:
         idx = arguments.index('-u')
         userpass = arguments[idx+1]
         try:
-            username, password = userpass.split(':')
+            opts['username'], opts['password'] = userpass.split(':')
+            opts['authentication'] = 1
         except:
             print(u'there was some error reading you username and password.\n '
                   u'Check is in correct \'username:password\' format')
@@ -141,13 +163,13 @@ def getconfig(arguments):
 
     if '-f' in arguments:
         idx = arguments.index('-f')
-        outputformat = arguments[idx+1]
-        if outputformat not in ['json', 'human', 'jsonpp', 'raw']:
+        opts['outputformat'] = arguments[idx+1]
+        if opts['outputformat'] not in ['json', 'human', 'jsonpp', 'raw']:
             print(u'Unknown output format [\'json\', \'human\', \'jsonpp\', \'raw\']')
             printusage()
             sys.exit(2)
 
-    return[host, authentication, username, password, outputformat]
+    return opts
 
 
 def printoutput(result, outputformat):
@@ -161,40 +183,45 @@ def printoutput(result, outputformat):
         print(result.text)
 
 
-def listapps(host, authentication, username, password, outputformat):
+def listapps(opts):
     try:
-        resp = requests.get('http://' + host + ':8080/v2/apps/')
+        resp = requests.get('http://' + opts['host'] + ':8080/v2/apps/')
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
         sys.exit(2)
-    printoutput(resp, outputformat)
+    printoutput(resp, opts['outputformat'])
 
 
-def listappid(id, host, authentication, username, password, outputformat):
+def listappid(appid, opts):
     try:
-        resp = requests.get('http://' + host + ':8080/v2/apps/' + id)
+        resp = requests.get('http://' + opts['host'] + ':8080/v2/apps/' + appid)
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
         sys.exit(2)
-    printoutput(resp, outputformat)
+    printoutput(resp, opts['outputformat'])
+    # If exists 'message' key in the returned dictionary is that the app doesn't exists
+    if 'message' in resp.json().keys():
+        return False
+    else:
+        return True
 
 
-def listappversions(id, host, authentication, username, password, outputformat):
+def listappversions(appid, opts):
     try:
-        resp = requests.get('http://' + host + ':8080/v2/apps/' + id + '/versions')
+        resp = requests.get('http://' + opts['host'] + ':8080/v2/apps/' + appid + '/versions')
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
         sys.exit(2)
-    printoutput(resp, outputformat)
+    printoutput(resp, opts['outputformat'])
 
 
-def createapp(filename, host, authentication, username, password, outputformat):
+def createapp(filename, opts):
     try:
         content = open(filename,'rb').read()
-        resp = requests.post('http://' + host + ':8080/v2/apps/', data=content)
+        resp = requests.post('http://' + opts['host'] + ':8080/v2/apps/', data=content)
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
@@ -206,28 +233,82 @@ def createapp(filename, host, authentication, username, password, outputformat):
         if e.errno == 13:
             print(u'No read permission in file ' + filename)
             sys.exit(2)
+    printoutput(resp, opts['outputformat'])
 
-    printoutput(resp, outputformat)
+
+def destroyapp(appid, opts):
+    if listappid(appid, opts):
+        print(u'Do you really want to destroy ' + appid + u' application? (y/N)')
+        chose = getch()
+        if chose in ['y','Y']:
+            try:
+                resp = requests.delete('http://' + opts['host'] + ':8080/v2/apps/' + appid)
+            except requests.exceptions.ConnectionError as e:
+                print(u'Error connecting to host')
+                print(e[0][1])
+                sys.exit(2)
+            printoutput(resp, opts['outputformat'])
+        else:
+            sys.exit(2)
+    else:
+        sys.exit(2)
 
 
-def destroyapp(id, host, authentication, username, password, outputformat):
+def restartapp(appid, opts):
     try:
-        resp = requests.delete('http://' + host + ':8080/v2/apps/' + id)
+        resp = requests.post('http://' + opts['host'] + ':8080/v2/apps/' + appid + '/restart')
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
         sys.exit(2)
-    printoutput(resp, outputformat)
+    printoutput(resp, opts['outputformat'])
 
 
-def restartapp(id, host, authentication, username, password, outputformat):
+def updateappid(arg, opts):
     try:
-        resp = requests.post('http://' + host + ':8080/v2/apps/' + id + '/restart')
+        content = open(arg[2],'rb').read()
+        resp = requests.put('http://' + opts['host'] + ':8080/v2/apps/' + arg[1], data=content)
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
         sys.exit(2)
-    printoutput(resp, outputformat)
+    except IOError as e:
+        if e.errno == 2:
+            print(u'file name ' + arg[2] + u' not found')
+            sys.exit(2)
+        if e.errno == 13:
+            print(u'No read permission in file ' + arg[2])
+            sys.exit(2)
+
+    printoutput(resp, opts['outputformat'])
+
+
+def updateappcpu(arg, opts):
+    try:
+        resp = requests.get('http://' + opts['host'] + ':8080/v2/apps/' + arg[2])
+    except requests.exceptions.ConnectionError as e:
+        print(u'Error connecting to host')
+        print(e[0][1])
+        sys.exit(2)
+    buff = resp.json()
+    buff['app']['cpus'] = arg[3]
+    try:
+        pdb.set_trace()
+        resp = requests.put('http://' + opts['host'] + ':8080/v2/apps/' + arg[2], data=str(buff).replace('u\\',''))
+    except requests.exceptions.ConnectionError as e:
+        print(u'Error connecting to host')
+        print(e[0][1])
+        sys.exit(2)
+    printoutput(resp, opts['outputformat'])
+
+
+def updateappmemory(arg, host, authentication, username, password, outputformat):
+    pass
+
+
+def updateappinstances(arg, host, authentication, username, password, outputformat):
+    pass
+
 
 # MAIN
 
@@ -236,7 +317,7 @@ if len(sys.argv) <= 1:
     printusage()
     sys.exit(2)
 
-host, authentication, username, password, outputformat = getconfig(sys.argv)
+options = getconfig(sys.argv)
 
 if 'app' in sys.argv:
     idx = sys.argv.index('app')
@@ -247,41 +328,52 @@ if 'app' in sys.argv:
         sys.exit(2)
 
     if arg[0].lower() == 'list':
-        listapps(host, authentication, username, password, outputformat)
+        listapps(options)
     elif arg[0].lower() == 'versions':
         try:
-            listappversions(arg[1], host, authentication, username, password, outputformat)
+            listappversions(arg[1], options)
         except IndexError:
             print(u'You must supply an application index')
             printusage()
             sys.exit(2)
     elif arg[0].lower() == 'show':
         try:
-            listappid(arg[1], host, authentication, username, password, outputformat)
+            listappid(arg[1], options)
         except IndexError:
             print(u'You must supply an application index')
             printusage()
             sys.exit(2)
     elif arg[0].lower() == 'create':
         try:
-            createapp(arg[1], host, authentication, username, password, outputformat)
+            createapp(arg[1], options)
         except IndexError:
             print(u'You must supply a file name')
             printusage()
             sys.exit(2)
-        pass
     elif arg[0].lower() == 'update':
-        pass
+        try:
+            if arg[1] == 'cpu':
+                updateappcpu(arg, options)
+            elif arg[1] == 'memory':
+                updateappmemory(arg, options)
+            elif arg[1] == 'instances':
+                updateappinstances(arg, options)
+            else:
+                updateappid(arg, options)
+        except IndexError:
+            print(u'Incorrect call to update app')
+            printusage()
+            sys.exit(2)
     elif arg[0].lower() == 'restart':
         try:
-            restartapp(arg[1], host, authentication, username, password, outputformat)
+            restartapp(arg[1], options)
         except IndexError:
             print(u'You must supply an application index')
             printusage()
             sys.exit(2)
     elif arg[0].lower() == 'destroy':
         try:
-            destroyapp(arg[1], host, authentication, username, password, outputformat)
+            destroyapp(arg[1], options)
         except IndexError:
             print(u'You must supply an application index')
             printusage()
