@@ -283,6 +283,7 @@ def updateappid(arg, opts):
     printoutput(resp, opts['outputformat'])
 
 
+# Still don't work
 def updateappcpu(arg, opts):
     try:
         resp = requests.get('http://' + opts['host'] + ':8080/v2/apps/' + arg[2])
@@ -291,10 +292,11 @@ def updateappcpu(arg, opts):
         print(e[0][1])
         sys.exit(2)
     buff = resp.json()
-    buff['app']['cpus'] = arg[3]
+    buff['app']['cpus'] = float(arg[3])
     try:
         pdb.set_trace()
-        resp = requests.put('http://' + opts['host'] + ':8080/v2/apps/' + arg[2], data=str(buff).replace('u\\',''))
+        headers = {'content-type': 'application/json'}
+        resp = requests.put('http://' + opts['host'] + ':8080/v2/apps/' + arg[2], data=buff, headers=headers)
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
@@ -302,12 +304,81 @@ def updateappcpu(arg, opts):
     printoutput(resp, opts['outputformat'])
 
 
-def updateappmemory(arg, host, authentication, username, password, outputformat):
+# Still don't work
+def updateappmemory(arg, opts):
     pass
 
 
-def updateappinstances(arg, host, authentication, username, password, outputformat):
+# Still don't work
+def updateappinstances(arg, opts):
     pass
+
+
+def listtasks(opts):
+    try:
+        resp = requests.get('http://' + opts['host'] + ':8080/v2/tasks/')
+    except requests.exceptions.ConnectionError as e:
+        print(u'Error connecting to host')
+        print(e[0][1])
+        sys.exit(2)
+    printoutput(resp, opts['outputformat'])
+
+
+def listtasksid(appid, opts):
+    try:
+        resp = requests.get('http://' + opts['host'] + ':8080/v2/apps/' + appid + '/tasks')
+    except requests.exceptions.ConnectionError as e:
+        print(u'Error connecting to host')
+        print(e[0][1])
+        sys.exit(2)
+    printoutput(resp, opts['outputformat'])
+    # If exists 'message' key in the returned dictionary is that the app doesn't exists
+    if 'message' in resp.json().keys():
+        return False
+    else:
+        return True
+
+
+def killtasks(appid, opts):
+    if listtasksid(appid, opts):
+        print(u'Do you really want to destroy all ' + appid + u' tasks? (y/N)')
+        chose = getch()
+        if chose in ['y','Y']:
+            try:
+                resp = requests.delete('http://' + opts['host'] + ':8080/v2/apps/' + appid + '/tasks')
+            except requests.exceptions.ConnectionError as e:
+                print(u'Error connecting to host')
+                print(e[0][1])
+                sys.exit(2)
+            printoutput(resp, opts['outputformat'])
+        else:
+            sys.exit(2)
+    else:
+        sys.exit(2)
+
+
+def killtask(appid, taskid, opts):
+    try:
+        resp = requests.delete('http://' + opts['host'] + ':8080/v2/apps/' + appid + '/tasks/' + taskid)
+    except requests.exceptions.ConnectionError as e:
+        print(u'Error connecting to host')
+        print(e[0][1])
+        sys.exit(2)
+
+    printoutput(resp, opts['outputformat'])
+
+
+def listqueue(opts):
+    try:
+        resp = requests.get('http://' + opts['host'] + ':8080/v2/queue/')
+    except requests.exceptions.ConnectionError as e:
+        print(u'Error connecting to host')
+        print(e[0][1])
+        sys.exit(2)
+    if resp:
+        print("No tasks queued")
+    else:
+        printoutput(resp, opts['outputformat'])
 
 
 # MAIN
@@ -385,18 +456,25 @@ if 'app' in sys.argv:
 
 elif 'task' in sys.argv:
     idx = sys.argv.index('task')
-    arg = sys.argv[idx+1:].lower()
+    arg = sys.argv[idx+1:]
     if not arg:
         print(u'Action \'task\' has no arguments')
         printusage()
         sys.exit(2)
 
     if arg[0].lower() == 'list':
-        pass
+        listtasks(options)
     elif arg[0].lower() == 'kill':
-        pass
+        killtasks(arg[1], options)
+    elif arg[0].lower() == 'killtask':
+        try:
+            killtask(arg[1], arg[2], options)
+        except IndexError:
+            print(u'You must supply a task id')
+            printusage()
+            sys.exit(2)
     elif arg[0].lower() == 'queue':
-        pass
+        listqueue(options)
     else:
         print(u'No proper argument to \'task\' action detected')
         printusage()
@@ -404,7 +482,7 @@ elif 'task' in sys.argv:
 
 elif 'group' in sys.argv:
     idx = sys.argv.index('group')
-    arg = sys.argv[idx+1:].lower()
+    arg = sys.argv[idx+1:]
     if not arg:
         print(u'Action \'group\' has no arguments')
         printusage()
@@ -425,7 +503,7 @@ elif 'group' in sys.argv:
 
 elif 'deploy' in sys.argv:
     idx = sys.argv.index('deploy')
-    arg = sys.argv[idx+1:].lower()
+    arg = sys.argv[idx+1:]
     if not arg:
         print(u'Action \'deploy\' has no arguments')
         printusage()
@@ -442,7 +520,7 @@ elif 'deploy' in sys.argv:
 
 elif 'marathon' in sys.argv:
     idx = sys.argv.index('marathon')
-    arg = sys.argv[idx+1:].lower()
+    arg = sys.argv[idx+1:]
     if not arg:
         print(u'Action \'marathon\' has no arguments')
         printusage()
