@@ -26,9 +26,9 @@ pmcli <flags...> [action] <args...>
        show [id] [version]       - show config and status of app of id and version
        create [jsonfile]         - deploy application defined in jsonfile
        update [id] [jsonfile]    - update application id as defined in jsonfile
-       update cpu [id] [cpu%]    - update application id to have cpu% of cpu share
-       update memory [id] [MB]   - update application id to have MB of memory
-       update instances [id] [N] - update application id to have N instances
+       [X] update cpu [id] [cpu%]    - update application id to have cpu% of cpu share
+       [X] update memory [id] [MB]   - update application id to have MB of memory
+       [X] update instances [id] [N] - update application id to have N instances
        restart [id]              - restart app of id
        destroy [id]              - destroy and remove all instances of id
 
@@ -36,24 +36,24 @@ pmcli <flags...> [action] <args...>
        list               - list all tasks
        list [id]          - list tasks of app of id
        kill [id]          - kill all tasks of app id
-       kill [id] [taskid] - kill task taskid of app id
+       killtask [taskid] - kill task taskid of app id
        queue              - list all queued tasks
 
     group
        list                        - list all groups
        list [groupid]              - list groups in groupid
        create [jsonfile]           - create a group defined in jsonfile
-       update [groupid] [jsonfile] - update group groupid as defined in jsonfile
+       [?] update [groupid] [jsonfile] - update group groupid as defined in jsonfile
        destroy [groupid]           - destroy group of groupid
 
     deploy
-       list               - list all active deploys
-       destroy [deployid] - cancel deployment of [deployid]
+       [X] list               - list all active deploys
+       [X] destroy [deployid] - cancel deployment of [deployid]
 
     marathon
-       leader   - get the current Marathon leader
-       abdicate - force the current leader to relinquish control
-       ping     - ping Marathon master host[s]
+       [X] leader   - get the current Marathon leader
+       [X] abdicate - force the current leader to relinquish control
+       [X] ping     - ping Marathon master host[s]
 
  Flags
   -c [config file]
@@ -314,29 +314,22 @@ def updateappinstances(arg, opts):
     pass
 
 
-def listtasks(opts):
-    try:
-        resp = requests.get('http://' + opts['host'] + ':8080/v2/tasks/')
-    except requests.exceptions.ConnectionError as e:
-        print(u'Error connecting to host')
-        print(e[0][1])
-        sys.exit(2)
-    printoutput(resp, opts['outputformat'])
-
-
-def listtasksid(appid, opts):
-    try:
-        resp = requests.get('http://' + opts['host'] + ':8080/v2/apps/' + appid + '/tasks')
-    except requests.exceptions.ConnectionError as e:
-        print(u'Error connecting to host')
-        print(e[0][1])
-        sys.exit(2)
-    printoutput(resp, opts['outputformat'])
-    # If exists 'message' key in the returned dictionary is that the app doesn't exists
-    if 'message' in resp.json().keys():
-        return False
+def listtasks(arg, opts):
+    if len(arg) == 2:
+        try:
+            resp = requests.get('http://' + opts['host'] + ':8080/v2/apps/' + arg[1] + '/tasks')
+        except requests.exceptions.ConnectionError as e:
+            print(u'Error connecting to host')
+            print(e[0][1])
+            sys.exit(2)
     else:
-        return True
+        try:
+            resp = requests.get('http://' + opts['host'] + ':8080/v2/tasks/')
+        except requests.exceptions.ConnectionError as e:
+            print(u'Error connecting to host')
+            print(e[0][1])
+            sys.exit(2)
+    printoutput(resp, opts['outputformat'])
 
 
 def killtasks(appid, opts):
@@ -379,6 +372,83 @@ def listqueue(opts):
         print("No tasks queued")
     else:
         printoutput(resp, opts['outputformat'])
+
+
+def listgroups(arg, opts):
+    if len(arg) >= 2:
+        try:
+            resp = requests.get('http://' + opts['host'] + ':8080/v2/groups/' + arg[1])
+        except requests.exceptions.ConnectionError as e:
+            print(u'Error connecting to host')
+            print(e[0][1])
+            sys.exit(2)
+    else:
+        try:
+            resp = requests.get('http://' + opts['host'] + ':8080/v2/groups/')
+        except requests.exceptions.ConnectionError as e:
+            print(u'Error connecting to host')
+            print(e[0][1])
+            sys.exit(2)
+    printoutput(resp, opts['outputformat'])
+    if 'message' in resp.json().keys():
+        return False
+    else:
+        return True
+
+
+def creategroup(filename, opts):
+    try:
+        content = open(filename,'rb').read()
+        resp = requests.post('http://' + opts['host'] + ':8080/v2/groups/', data=content)
+    except requests.exceptions.ConnectionError as e:
+        print(u'Error connecting to host')
+        print(e[0][1])
+        sys.exit(2)
+    except IOError as e:
+        if e.errno == 2:
+            print(u'file name ' + filename + u' not found')
+            sys.exit(2)
+        if e.errno == 13:
+            print(u'No read permission in file ' + filename)
+            sys.exit(2)
+    printoutput(resp, opts['outputformat'])
+
+
+def updategroup(arg, opts):
+    try:
+        content = open(arg[2],'rb').read()
+        resp = requests.put('http://' + opts['host'] + ':8080/v2/groups/' + arg[1], data=content)
+    except requests.exceptions.ConnectionError as e:
+        print(u'Error connecting to host')
+        print(e[0][1])
+        sys.exit(2)
+    except IOError as e:
+        if e.errno == 2:
+            print(u'file name ' + arg[2] + u' not found')
+            sys.exit(2)
+        if e.errno == 13:
+            print(u'No read permission in file ' + arg[2])
+            sys.exit(2)
+
+    printoutput(resp, opts['outputformat'])
+
+
+def destroygroup(arg, opts):
+    if listgroups(arg, opts):
+        print(u'Do you really want to destroy ' + arg[1] + u' group? (y/N)')
+        chose = getch()
+        if chose in ['y','Y']:
+            try:
+                resp = requests.delete('http://' + opts['host'] + ':8080/v2/groups/' + arg[1])
+            except requests.exceptions.ConnectionError as e:
+                print(u'Error connecting to host')
+                print(e[0][1])
+                sys.exit(2)
+            printoutput(resp, opts['outputformat'])
+        else:
+            sys.exit(2)
+    else:
+        sys.exit(2)
 
 
 # MAIN
@@ -463,7 +533,7 @@ elif 'task' in sys.argv:
         sys.exit(2)
 
     if arg[0].lower() == 'list':
-        listtasks(options)
+        listtasks(arg, options)
     elif arg[0].lower() == 'kill':
         killtasks(arg[1], options)
     elif arg[0].lower() == 'killtask':
@@ -489,13 +559,13 @@ elif 'group' in sys.argv:
         sys.exit(2)
 
     if arg[0].lower() == 'list':
-        pass
+        listgroups(arg, options)
     elif arg[0].lower() == 'create':
-        pass
+        creategroup(arg[1], options)
     elif arg[0].lower() == 'update':
-        pass
+        updategroup(arg, options)
     elif arg[0].lower() == 'destroy':
-        pass
+        destroygroup(arg, options)
     else:
         print(u'No proper argument to \'group\' action detected')
         printusage()
