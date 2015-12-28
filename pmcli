@@ -1,14 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Marathon CLI based on marathonctl written in python
+Marathon CLI based on marathonctl and written in python
 """
 import sys
 import os
 import termios
 import ConfigParser
 import requests
-import pdb
+import io
 import json
 
 __author__ = "Iván Renedo"
@@ -16,63 +16,69 @@ __copyright__ = "GPL"
 
 
 def printusage():
-    print("""
+    """
+    Just prints pmcli usage syntax
+    """
+    print(u"""
 pmcli <flags...> [action] <args...>
- Actions
-    app
-       list                      - list all apps
-       versions [id]             - list all versions of apps of id
-       show [id]                 - show config and status of app of id (latest version)
-       show [id] [version]       - show config and status of app of id and version
-       create [jsonfile]         - deploy application defined in jsonfile
-       update [id] [jsonfile]    - update application id as defined in jsonfile
-       [X] update cpu [id] [cpu%]    - update application id to have cpu% of cpu share
-       [X] update memory [id] [MB]   - update application id to have MB of memory
-       [X] update instances [id] [N] - update application id to have N instances
-       restart [id]              - restart app of id
-       destroy [id]              - destroy and remove all instances of id
-
-    task
-       list               - list all tasks
-       list [id]          - list tasks of app of id
-       kill [id]          - kill all tasks of app id
-       killtask [taskid] - kill task taskid of app id
-       queue              - list all queued tasks
-
-    group
-       list                        - list all groups
-       list [groupid]              - list groups in groupid
-       create [jsonfile]           - create a group defined in jsonfile
-       [?] update [groupid] [jsonfile] - update group groupid as defined in jsonfile
-       destroy [groupid]           - destroy group of groupid
-
-    deploy
-       [X] list               - list all active deploys
-       [X] destroy [deployid] - cancel deployment of [deployid]
-
-    marathon
-       [X] leader   - get the current Marathon leader
-       [X] abdicate - force the current leader to relinquish control
-       [X] ping     - ping Marathon master host[s]
+    ├─ app
+    │    └─┬─ list                          - list all apps
+    │      ├─ versions [appid]              - list all versions of apps of appid
+    │      ├─ show [appid]                  - show config and status of app of appid (latest version)
+    │      ├─ show [appid] [version]        - show config and status of app of appid and version
+    │      ├─ create [jsonfile]             - deploy application defined in jsonfile
+    │      ├─ update [appid] [jsonfile]     - update application appid as defined in jsonfile
+    │      ├─ update cpu [appid] [cpu%]     - update application appid to have cpu% of cpu share
+    │      ├─ update memory [appid] [MB]    - update application appid to have MB of memory
+    │      ├─ update instances [appid] [N]  - update application appid to have N instances
+    │      ├─ restart [appid]               - restart app of appid
+    │      └─ destroy [appid]               - destroy and remove all instances of appid
+    │
+    ├─ task
+    │     └─┬─ list                       - list all tasks
+    │       ├─ list [appid]               - list tasks of app of appid
+    │       ├─ kill [appid]               - kill all tasks of app appid
+    │       ├─ killtask [appid] [taskid]  - kill task taskid of app appid
+    │       └─ queue                      - list all queued tasks
+    │
+    ├─ group
+    │      └─┬─ list                        - list all groups
+    │        ├─ list [groupid]              - list groups in groupid
+    │        ├─ create [jsonfile]           - create a group defined in jsonfile
+    │        ├─ update [groupid] [jsonfile] - update group groupid as defined in jsonfile
+    │        └─ destroy [groupid]           - destroy group of groupid
+    │
+    ├─ deploy
+    │       └─┬─ list                - list all active deploys
+    │         └─ destroy [deployid]  - cancel deployment of [deployid]
+    │
+    └── marathon
+               └─┬─ leader    - get the current Marathon leader
+                 ├─ abdicate  - force the current leader to relinquish control
+                 ├─ ping      - ping Marathon master host[s]
+                 ├─ info      - get info about marathon instance
+                 └─ metrics   - get marathon metrics
 
  Flags
   -c [config file]
   -h [host]
+  -P [port] Marathon port
   -u [user:password] (separated by colon)
   -p [profile] (profile used in the config file)
+  -o [output file] (json format. Overrides -f flag)
   -f [format]
        human  (simplified columns, default)
        json   (json on one line)
        jsonpp (json pretty printed)
        raw    (the exact response from Marathon)
+
 """)
 
-
 def getch():
-    '''
+    """
     Get one character from stdin
-    :return: char
-    '''
+    :return: char pressed
+    """
     old_settings = termios.tcgetattr(0)
     new_settings = old_settings[:]
     new_settings[3] &= ~termios.ICANON
@@ -84,35 +90,59 @@ def getch():
     return ch
 
 
-def PrintHuman(dictionary, ident = '', braces=1):
-    for key, value in dictionary.iteritems():
+def printhuman(dictionary, ident='', braces=1):
+    """
+    Prints the result in human readable format
+    :param dictionary: output message
+    :param ident: indentantion
+    :param braces: number of braces to multiple results section
+    """
+    tempdict = {}
+    # Deployment list comes in a list instead a dictionary. Must be converted before printing
+    if isinstance(dictionary, list):
+        i = 0
+        for item in dictionary:
+            templist = []
+            templist.append(item)
+            tempdict[item['id']] = templist
+            i += 1
+
+    else:
+        tempdict = dictionary.copy()
+
+    for key, value in tempdict.iteritems():
         if isinstance(value, dict):
             print '%s%s%s%s' % (ident, braces*'[', key, braces*']')
-            PrintHuman(value, ident+'  ', braces+1)
+            printhuman(value, ident+'  ', braces+1)
         elif isinstance(value, list):
-            ndict=0
+            ndict = 0
             for v in value:
                 if isinstance(v, dict):
                     ndict += 1
             if ndict:
-                print '%s%s' % (ident, key)
+                print('%s%s' % (ident, key))
                 for e in value:
                     if isinstance(e, dict):
-                        PrintHuman(e, ident+'  ', braces+1)
+                        printhuman(e, ident+'  ', braces+1)
                     else:
-                         print ident+'%s : %s' %(key, e)
+                        print(ident+'%s : %s' % (key, e))
             else:
-                print ident+'%s : %s' %(key, value)
+                print(ident+'%s : %s' % (key, value))
         else:
-            print ident+'%s : %s' %(key, value)
+            print(ident+'%s : %s' % (key, value))
 
 
 def getconfig(arguments):
-    opts = {'host': ' ', 'authentication': 0, 'username': '', 'password': '', 'outputformat': 'human'}
+    """
+    Gets the arguments options and puts it in the opts dictionary
+    :param arguments: arguments used to call pmcli
+    """
+    opts = {'host': ' ', 'authentication': 0, 'username': '', 'password': '', 'outputformat': 'human', 'file': False,
+            'outputfile': '', 'port': '8080'}
     configfile = os.path.expanduser("~/.pmcli.cfg")
     if '-c' in arguments:
-        idx = arguments.index('-c')
-        configfile = arguments[idx+1]
+        index = arguments.index('-c')
+        configfile = arguments[index+1]
 
     try:
         f = open(configfile, 'r')
@@ -138,69 +168,112 @@ def getconfig(arguments):
         opts['username'] = cfg.get(mesosprofile, 'user')
         opts['password'] = cfg.get(mesosprofile, 'password')
         opts['outputformat'] = cfg.get(mesosprofile, 'format')
+        opts['port'] = cfg.get(mesosprofile, 'port')
     except ConfigParser.NoOptionError as e:
         print(u'Syntax error en configfile-> ' + str(e))
         sys.exit(2)
-    except ConfigParser.NoSectionError as e:
+    except ConfigParser.NoSectionError:
         print(u'Profile \"' + mesosprofile + u'\" doesn\'t exists in file ' + configfile)
         sys.exit(2)
 
     if '-h' in arguments:
-        idx = arguments.index('-h')
-        opts['host'] = arguments[idx+1]
+        index = arguments.index('-h')
+        opts['host'] = arguments[index+1]
 
     if '-u' in arguments:
-        idx = arguments.index('-u')
-        userpass = arguments[idx+1]
+        index = arguments.index('-u')
+        userpass = arguments[index+1]
         try:
             opts['username'], opts['password'] = userpass.split(':')
             opts['authentication'] = 1
         except:
-            print(u'there was some error reading you username and password.\n '
-                  u'Check is in correct \'username:password\' format')
+            print(u'there was some error reading you username and password.\n'
+                  u'Format: \'username:password\' format')
             printusage()
             sys.exit(2)
 
     if '-f' in arguments:
-        idx = arguments.index('-f')
-        opts['outputformat'] = arguments[idx+1]
+        index = arguments.index('-f')
+        opts['outputformat'] = arguments[index+1]
         if opts['outputformat'] not in ['json', 'human', 'jsonpp', 'raw']:
             print(u'Unknown output format [\'json\', \'human\', \'jsonpp\', \'raw\']')
             printusage()
             sys.exit(2)
 
+    if '-o' in arguments:
+        index = arguments.index('-o')
+        opts['file'] = True
+        opts['outputfile'] = arguments[index+1]
+
+    if '-P' in arguments:
+        index = arguments.index('-P')
+        opts['port'] = arguments[index+1]
+
     return opts
 
 
-def printoutput(result, outputformat):
-    if outputformat == 'json':
-        print(result.json())
-    elif outputformat == 'jsonpp':
-        print(json.dumps(result.json(), indent=2))
-    elif outputformat == 'human':
-        PrintHuman(result.json())
-    elif outputformat == 'raw':
-        print(result.text)
+def printoutput(result, outputformat, tofile, ofile):
+    """
+    Prints the output from the call to marathon
+    :param result: result from the request call
+    :param outputformat: format to use to print it
+    :param tofile: boolean. Says if the output must be a file
+    :param ofile: File to write the result
+    """
+    if tofile:
+        with io.open(ofile, 'w', encoding='utf-8') as f:
+            f.write(unicode(json.dumps(result.json(), indent=2, ensure_ascii=False)))
+    else:
+        if outputformat == 'json':
+            print(result.json())
+        elif outputformat == 'jsonpp':
+            print(json.dumps(result.json(), indent=2))
+        elif outputformat == 'human':
+            printhuman(result.json())
+        elif outputformat == 'raw':
+            print(result.text)
 
 
 def listapps(opts):
+    """
+    Lists all current marathon apps.
+        GET /v2/apps
+    :param opts: options used to connect and print the result
+    """
     try:
-        resp = requests.get('http://' + opts['host'] + ':8080/v2/apps/')
+        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/')
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
         sys.exit(2)
-    printoutput(resp, opts['outputformat'])
+    printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
 
 
-def listappid(appid, opts):
-    try:
-        resp = requests.get('http://' + opts['host'] + ':8080/v2/apps/' + appid)
-    except requests.exceptions.ConnectionError as e:
-        print(u'Error connecting to host')
-        print(e[0][1])
-        sys.exit(2)
-    printoutput(resp, opts['outputformat'])
+def listappid(arg, opts):
+    """
+    Lists an app by its appid.
+        GET /v2/apps/{appId}
+        GET /v2/apps/{appId}/versions/{version}
+    :param arg: if more than 3 arguments: arg[1] -> appid, arg[2] -> version, else show all running tasks from arg[1]
+    :param opts: options used to connect and print the result
+    :return: True if appid exists, False if not
+    """
+    if len(arg) >= 3:
+        try:
+            resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + arg[1] +
+                                '/versions/' + arg[2])
+        except requests.exceptions.ConnectionError as e:
+            print(u'Error connecting to host')
+            print(e[0][1])
+            sys.exit(2)
+    else:
+        try:
+            resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + arg[1])
+        except requests.exceptions.ConnectionError as e:
+            print(u'Error connecting to host')
+            print(e[0][1])
+            sys.exit(2)
+    printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
     # If exists 'message' key in the returned dictionary is that the app doesn't exists
     if 'message' in resp.json().keys():
         return False
@@ -209,19 +282,31 @@ def listappid(appid, opts):
 
 
 def listappversions(appid, opts):
+    """
+    Lists all version of the application with appid.
+        GET /v2/apps/{appId}/versions
+    :param appid: appid
+    :param opts: options used to connect and print the result
+    """
     try:
-        resp = requests.get('http://' + opts['host'] + ':8080/v2/apps/' + appid + '/versions')
+        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + appid + '/versions')
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
         sys.exit(2)
-    printoutput(resp, opts['outputformat'])
+    printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
 
 
 def createapp(filename, opts):
+    """
+    Creates a marathon app from a json file and starts it.
+        POST /v2/apps
+    :param filename: filename with the app description
+    :param opts: options used to connect and print the result
+    """
     try:
         content = open(filename,'rb').read()
-        resp = requests.post('http://' + opts['host'] + ':8080/v2/apps/', data=content)
+        resp = requests.post('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/', data=content)
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
@@ -233,21 +318,28 @@ def createapp(filename, opts):
         if e.errno == 13:
             print(u'No read permission in file ' + filename)
             sys.exit(2)
-    printoutput(resp, opts['outputformat'])
+    printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
 
 
-def destroyapp(appid, opts):
-    if listappid(appid, opts):
-        print(u'Do you really want to destroy ' + appid + u' application? (y/N)')
+def destroyapp(arg, opts):
+    """
+    Destroys a marathon app with its given appid.
+        DELETE /v2/apps/{appId}
+    :param arg: arg[1] -> appid
+    :param opts: options used to connect and print the result
+    :return:
+    """
+    if listappid(arg, opts):
+        print(u'Do you really want to destroy ' + arg[1] + u' application? (y/N)')
         chose = getch()
-        if chose in ['y','Y']:
+        if chose in ['y', 'Y']:
             try:
-                resp = requests.delete('http://' + opts['host'] + ':8080/v2/apps/' + appid)
+                resp = requests.delete('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + arg[1])
             except requests.exceptions.ConnectionError as e:
                 print(u'Error connecting to host')
                 print(e[0][1])
                 sys.exit(2)
-            printoutput(resp, opts['outputformat'])
+            printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
         else:
             sys.exit(2)
     else:
@@ -255,19 +347,31 @@ def destroyapp(appid, opts):
 
 
 def restartapp(appid, opts):
+    """
+    Restarts all marathon tasks of and appid
+        POST /v2/apps/{appId}/restart
+    :param appid: appid to restart
+    :param opts: options used to connect and print the result
+    """
     try:
-        resp = requests.post('http://' + opts['host'] + ':8080/v2/apps/' + appid + '/restart')
+        resp = requests.post('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + appid + '/restart')
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
         sys.exit(2)
-    printoutput(resp, opts['outputformat'])
+    printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
 
 
 def updateappid(arg, opts):
+    """
+    Changes config to application with its appid with a json file
+        PUT /v2/apps/{appId}
+    :param arg: arg[1] -> appid , arg[2] -> json file
+    :param opts: options used to connect and print the result
+    """
     try:
-        content = open(arg[2],'rb').read()
-        resp = requests.put('http://' + opts['host'] + ':8080/v2/apps/' + arg[1], data=content)
+        content = open(arg[2], 'rb').read()
+        resp = requests.put('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + arg[1], data=content)
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
@@ -280,13 +384,13 @@ def updateappid(arg, opts):
             print(u'No read permission in file ' + arg[2])
             sys.exit(2)
 
-    printoutput(resp, opts['outputformat'])
+    printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
 
 
 # Still don't work
 def updateappcpu(arg, opts):
     try:
-        resp = requests.get('http://' + opts['host'] + ':8080/v2/apps/' + arg[2])
+        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + arg[2])
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
@@ -294,14 +398,14 @@ def updateappcpu(arg, opts):
     buff = resp.json()
     buff['app']['cpus'] = float(arg[3])
     try:
-        pdb.set_trace()
         headers = {'content-type': 'application/json'}
-        resp = requests.put('http://' + opts['host'] + ':8080/v2/apps/' + arg[2], data=buff, headers=headers)
+        resp = requests.put('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + arg[2],
+                            data=buff, headers=headers)
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
         sys.exit(2)
-    printoutput(resp, opts['outputformat'])
+    printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
 
 
 # Still don't work
@@ -315,81 +419,115 @@ def updateappinstances(arg, opts):
 
 
 def listtasks(arg, opts):
-    if len(arg) == 2:
+    """
+    List all tasks in marathon or belonging to an appid.
+        GET /v2/apps/{appId}/tasks
+        GET /v2/tasks
+    :param arg: if more than 2 arguments: arg[1] -> appid, else show all running tasks
+    :param opts: options used to connect and print the result
+    :return : True if task and app exists, False if not
+    """
+    if len(arg) >= 2:
         try:
-            resp = requests.get('http://' + opts['host'] + ':8080/v2/apps/' + arg[1] + '/tasks')
+            resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + arg[1] + '/tasks')
         except requests.exceptions.ConnectionError as e:
             print(u'Error connecting to host')
             print(e[0][1])
             sys.exit(2)
     else:
         try:
-            resp = requests.get('http://' + opts['host'] + ':8080/v2/tasks/')
+            resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/tasks/')
         except requests.exceptions.ConnectionError as e:
             print(u'Error connecting to host')
             print(e[0][1])
             sys.exit(2)
-    printoutput(resp, opts['outputformat'])
+
+    printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
+    if 'message' in resp.json().keys():
+        return False
+    else:
+        return True
 
 
-def killtasks(appid, opts):
-    if listtasksid(appid, opts):
-        print(u'Do you really want to destroy all ' + appid + u' tasks? (y/N)')
-        chose = getch()
-        if chose in ['y','Y']:
-            try:
-                resp = requests.delete('http://' + opts['host'] + ':8080/v2/apps/' + appid + '/tasks')
-            except requests.exceptions.ConnectionError as e:
-                print(u'Error connecting to host')
-                print(e[0][1])
+def killtasks(arg, opts):
+    """
+    kill application tasks
+        DELETE /v2/apps/{appId}/tasks
+        DELETE /v2/apps/{appId}/tasks/{taskId}
+    :param arg: if more than 3 arguments: arg[1] -> appid, arg[2]-> taskid. Else kill all tasks from arg[1]
+    :param opts: options used to connect and print the result
+    """
+    call = ''
+    if len(arg) >= 3:
+        # If more than 3 elements in arg, then the order is to kill a taskid from an appid
+        if listtasks(arg, opts):
+            print(u'Do you really want to destroy task ' + arg[2] + u' from application ' + arg[1] + u'? (y/N)')
+            chose = getch()
+            if chose in ['y', 'Y']:
+               call = 'http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + arg[1] + '/tasks/' + arg[2]
+            else:
                 sys.exit(2)
-            printoutput(resp, opts['outputformat'])
-        else:
-            sys.exit(2)
     else:
-        sys.exit(2)
-
-
-def killtask(appid, taskid, opts):
+        # If not, the order is to kill all tasks from appid
+        if listtasks(arg, opts):
+            print(u'Do you really want to destroy all tasks from application ' + arg[1] + u'? (y/N)')
+            chose = getch()
+            if chose in ['y', 'Y']:
+                call = 'http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + arg[1] + '/tasks'
+            else:
+                sys.exit(2)
     try:
-        resp = requests.delete('http://' + opts['host'] + ':8080/v2/apps/' + appid + '/tasks/' + taskid)
+        resp = requests.delete(call)
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
         sys.exit(2)
-
-    printoutput(resp, opts['outputformat'])
+    printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
 
 
 def listqueue(opts):
+    """
+    List content of teh staging queue
+        GET /v2/queue
+    :param opts: options used to connect and print the result
+    """
     try:
-        resp = requests.get('http://' + opts['host'] + ':8080/v2/queue/')
+        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/queue/')
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
         sys.exit(2)
-    if resp:
+
+    if not resp:
         print("No tasks queued")
     else:
-        printoutput(resp, opts['outputformat'])
+        printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
 
 
 def listgroups(arg, opts):
+    """
+    Get all groups config or just one from its groupid depending the arg variable
+        GET /v2/groups
+        GET /v2/groups/{groupId}
+    :param arg: if more than 2 arguments: arg[1] -> appid, else show all running tasks
+    :param opts: options used to connect and print the result
+    :return: True if groupid exists. False if not
+    """
     if len(arg) >= 2:
         try:
-            resp = requests.get('http://' + opts['host'] + ':8080/v2/groups/' + arg[1])
+            resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/groups/' + arg[1])
         except requests.exceptions.ConnectionError as e:
             print(u'Error connecting to host')
             print(e[0][1])
             sys.exit(2)
     else:
         try:
-            resp = requests.get('http://' + opts['host'] + ':8080/v2/groups/')
+            resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/groups/')
         except requests.exceptions.ConnectionError as e:
             print(u'Error connecting to host')
             print(e[0][1])
             sys.exit(2)
-    printoutput(resp, opts['outputformat'])
+    printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
     if 'message' in resp.json().keys():
         return False
     else:
@@ -397,9 +535,15 @@ def listgroups(arg, opts):
 
 
 def creategroup(filename, opts):
+    """
+    Create a group from a json file
+        POST /v2/groups
+    :param filename: file with the group's description
+    :param opts: options used to connect and print the result
+    """
     try:
-        content = open(filename,'rb').read()
-        resp = requests.post('http://' + opts['host'] + ':8080/v2/groups/', data=content)
+        content = open(filename, 'rb').read()
+        resp = requests.post('http://' + opts['host'] + ':' + opts['port'] + '/v2/groups/', data=content)
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
@@ -411,13 +555,19 @@ def creategroup(filename, opts):
         if e.errno == 13:
             print(u'No read permission in file ' + filename)
             sys.exit(2)
-    printoutput(resp, opts['outputformat'])
+    printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
 
 
 def updategroup(arg, opts):
+    """
+    Changes configuration of a group from a json file
+        PUT /v2/groups/{groupId}
+    :param arg: arg[1] -> groupid , arg[2] -> filename
+    :param opts: options used to connect and print the result
+    """
     try:
-        content = open(arg[2],'rb').read()
-        resp = requests.put('http://' + opts['host'] + ':8080/v2/groups/' + arg[1], data=content)
+        content = open(arg[2], 'rb').read()
+        resp = requests.put('http://' + opts['host'] + ':' + opts['port'] + '/v2/groups/' + arg[1], data=content)
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
@@ -429,26 +579,142 @@ def updategroup(arg, opts):
         if e.errno == 13:
             print(u'No read permission in file ' + arg[2])
             sys.exit(2)
+    except IndexError:
+        print(u'Error calling group update\nSyntax: pmcli group update [groupid] [json file]')
+        sys.exit(2)
 
-    printoutput(resp, opts['outputformat'])
+    printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
 
 
 def destroygroup(arg, opts):
+    """
+    Removes a group
+        DELETE /v2/groups/{groupId}
+    :param arg: groupid to delete
+    :param opts: options used to connect and print the result
+    """
     if listgroups(arg, opts):
         print(u'Do you really want to destroy ' + arg[1] + u' group? (y/N)')
         chose = getch()
-        if chose in ['y','Y']:
+        if chose in ['y', 'Y']:
             try:
-                resp = requests.delete('http://' + opts['host'] + ':8080/v2/groups/' + arg[1])
+                resp = requests.delete('http://' + opts['host'] + ':' + opts['port'] + '/v2/groups/' + arg[1])
             except requests.exceptions.ConnectionError as e:
                 print(u'Error connecting to host')
                 print(e[0][1])
                 sys.exit(2)
-            printoutput(resp, opts['outputformat'])
+            printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
         else:
             sys.exit(2)
     else:
         sys.exit(2)
+
+
+def listdeploys(opts):
+    """
+    Lists all running deployments
+        GET /v2/deployments
+    :param opts: options used to connect and print the result
+    """
+    try:
+        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/deployments/')
+    except requests.exceptions.ConnectionError as e:
+        print(u'Error connecting to host')
+        print(e[0][1])
+        sys.exit(2)
+    printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
+
+
+def destroydeployment(deployid, opts):
+    """
+    Removes a deployment from its given deploymentId
+        DELETE /v2/deployments/{deploymentId}
+    :param deployid: deploymentId
+    :param opts: options used to connect and print the result
+    """
+    try:
+        resp = requests.delete('http://' + opts['host'] + ':' + opts['port'] + '/v2/deployments/' + deployid)
+    except requests.exceptions.ConnectionError as e:
+        print(u'Error connecting to host')
+        print(e[0][1])
+        sys.exit(2)
+
+    printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
+
+
+def getcurrentleader(opts):
+    """
+    Returns the current marathon's leader host
+        GET /v2/leader
+    :param opts: options used to connect and print the result
+    """
+    try:
+        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/leader/')
+    except requests.exceptions.ConnectionError as e:
+        print(u'Error connecting to host')
+        print(e[0][1])
+        sys.exit(2)
+    printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
+
+
+def forcerelinquish(opts):
+    """
+    Forces a marathon leader to relinquish. A new election triggers
+        DELETE /v2/leader
+    :param opts: options used to connect and print the result
+    """
+    try:
+        resp = requests.delete('http://' + opts['host'] + ':' + opts['port'] + '/v2/leader/')
+    except requests.exceptions.ConnectionError as e:
+        print(u'Error connecting to host')
+        print(e[0][1])
+        sys.exit(2)
+    printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
+
+
+def pingmaster(opts):
+    """
+    Pings marathon to test if it's alive
+    :param opts: options used to connect
+    """
+    try:
+        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/ping')
+    except requests.exceptions.ConnectionError as e:
+        print(u'Error connecting to host')
+        print(e[0][1])
+        sys.exit(2)
+    print(resp.text)
+
+
+def getinfo(opts):
+    """
+    Gets info about marathon instances
+        GET /v2/info
+    :param opts: options used to connect and print the result
+    :return:
+    """
+    try:
+        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/info/')
+    except requests.exceptions.ConnectionError as e:
+        print(u'Error connecting to host')
+        print(e[0][1])
+        sys.exit(2)
+    printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
+
+
+def getmetrics(opts):
+    """
+    Gets metrics form marathon
+        GET /metrics
+    :param opts: options used to connect and print the result
+    """
+    try:
+        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/metrics')
+    except requests.exceptions.ConnectionError as e:
+        print(u'Error connecting to host')
+        print(e[0][1])
+        sys.exit(2)
+    printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
 
 
 # MAIN
@@ -462,59 +728,54 @@ options = getconfig(sys.argv)
 
 if 'app' in sys.argv:
     idx = sys.argv.index('app')
-    arg = sys.argv[idx+1:]
-    if not arg:
+    argum = sys.argv[idx+1:]
+    if not argum:
         print(u'Action \'app\' has no arguments')
         printusage()
         sys.exit(2)
 
-    if arg[0].lower() == 'list':
+    if argum[0].lower() == 'list':
         listapps(options)
-    elif arg[0].lower() == 'versions':
+    elif argum[0].lower() == 'versions':
         try:
-            listappversions(arg[1], options)
+            listappversions(argum[1], options)
         except IndexError:
             print(u'You must supply an application index')
             printusage()
             sys.exit(2)
-    elif arg[0].lower() == 'show':
+    elif argum[0].lower() == 'show':
+            listappid(argum, options)
+    elif argum[0].lower() == 'create':
         try:
-            listappid(arg[1], options)
-        except IndexError:
-            print(u'You must supply an application index')
-            printusage()
-            sys.exit(2)
-    elif arg[0].lower() == 'create':
-        try:
-            createapp(arg[1], options)
+            createapp(argum[1], options)
         except IndexError:
             print(u'You must supply a file name')
             printusage()
             sys.exit(2)
-    elif arg[0].lower() == 'update':
+    elif argum[0].lower() == 'update':
         try:
-            if arg[1] == 'cpu':
-                updateappcpu(arg, options)
-            elif arg[1] == 'memory':
-                updateappmemory(arg, options)
-            elif arg[1] == 'instances':
-                updateappinstances(arg, options)
+            if argum[1] == 'cpu':
+                updateappcpu(argum, options)
+            elif argum[1] == 'memory':
+                updateappmemory(argum, options)
+            elif argum[1] == 'instances':
+                updateappinstances(argum, options)
             else:
-                updateappid(arg, options)
+                updateappid(argum, options)
         except IndexError:
             print(u'Incorrect call to update app')
             printusage()
             sys.exit(2)
-    elif arg[0].lower() == 'restart':
+    elif argum[0].lower() == 'restart':
         try:
-            restartapp(arg[1], options)
+            restartapp(argum[1], options)
         except IndexError:
             print(u'You must supply an application index')
             printusage()
             sys.exit(2)
-    elif arg[0].lower() == 'destroy':
+    elif argum[0].lower() == 'destroy':
         try:
-            destroyapp(arg[1], options)
+            destroyapp(argum, options)
         except IndexError:
             print(u'You must supply an application index')
             printusage()
@@ -526,24 +787,17 @@ if 'app' in sys.argv:
 
 elif 'task' in sys.argv:
     idx = sys.argv.index('task')
-    arg = sys.argv[idx+1:]
-    if not arg:
+    argum = sys.argv[idx+1:]
+    if not argum:
         print(u'Action \'task\' has no arguments')
         printusage()
         sys.exit(2)
 
-    if arg[0].lower() == 'list':
-        listtasks(arg, options)
-    elif arg[0].lower() == 'kill':
-        killtasks(arg[1], options)
-    elif arg[0].lower() == 'killtask':
-        try:
-            killtask(arg[1], arg[2], options)
-        except IndexError:
-            print(u'You must supply a task id')
-            printusage()
-            sys.exit(2)
-    elif arg[0].lower() == 'queue':
+    if argum[0].lower() == 'list':
+        listtasks(argum, options)
+    elif argum[0].lower() == 'kill':
+        killtasks(argum, options)
+    elif argum[0].lower() == 'queue':
         listqueue(options)
     else:
         print(u'No proper argument to \'task\' action detected')
@@ -552,20 +806,20 @@ elif 'task' in sys.argv:
 
 elif 'group' in sys.argv:
     idx = sys.argv.index('group')
-    arg = sys.argv[idx+1:]
-    if not arg:
+    argum = sys.argv[idx+1:]
+    if not argum:
         print(u'Action \'group\' has no arguments')
         printusage()
         sys.exit(2)
 
-    if arg[0].lower() == 'list':
-        listgroups(arg, options)
-    elif arg[0].lower() == 'create':
-        creategroup(arg[1], options)
-    elif arg[0].lower() == 'update':
-        updategroup(arg, options)
-    elif arg[0].lower() == 'destroy':
-        destroygroup(arg, options)
+    if argum[0].lower() == 'list':
+        listgroups(argum, options)
+    elif argum[0].lower() == 'create':
+        creategroup(argum[1], options)
+    elif argum[0].lower() == 'update':
+        updategroup(argum, options)
+    elif argum[0].lower() == 'destroy':
+        destroygroup(argum, options)
     else:
         print(u'No proper argument to \'group\' action detected')
         printusage()
@@ -573,16 +827,21 @@ elif 'group' in sys.argv:
 
 elif 'deploy' in sys.argv:
     idx = sys.argv.index('deploy')
-    arg = sys.argv[idx+1:]
-    if not arg:
+    argum = sys.argv[idx+1:]
+    if not argum:
         print(u'Action \'deploy\' has no arguments')
         printusage()
         sys.exit(2)
 
-    if arg[0].lower() == 'list':
-        pass
-    elif arg[0].lower() == 'destroy':
-        pass
+    if argum[0].lower() == 'list':
+        listdeploys(options)
+    elif argum[0].lower() == 'destroy':
+        try:
+            destroydeployment(argum[1], options)
+        except IndexError:
+            print(u'You must supply a deploy id')
+            printusage()
+            sys.exit(2)
     else:
         print(u'No proper argument to \'deploy\' action detected')
         printusage()
@@ -590,18 +849,22 @@ elif 'deploy' in sys.argv:
 
 elif 'marathon' in sys.argv:
     idx = sys.argv.index('marathon')
-    arg = sys.argv[idx+1:]
-    if not arg:
+    argum = sys.argv[idx+1:]
+    if not argum:
         print(u'Action \'marathon\' has no arguments')
         printusage()
         sys.exit(2)
 
-    if arg[0].lower() == 'leader':
-        pass
-    elif arg[0].lower() == 'abdicate':
-        pass
-    elif arg[0].lower() == 'pass':
-        pass
+    if argum[0].lower() == 'leader':
+        getcurrentleader(options)
+    elif argum[0].lower() == 'abdicate':
+        forcerelinquish(options)
+    elif argum[0].lower() == 'ping':
+        pingmaster(options)
+    elif argum[0].lower() == 'info':
+        getinfo(options)
+    elif argum[0].lower() == 'metrics':
+        getmetrics(options)
     else:
         print(u'No proper argument to \'marathon\' action detected')
         printusage()
