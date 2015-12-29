@@ -16,14 +16,14 @@ Just needs a python interpreter (2.x or 3.x) and this very common python modules
 ## Configuration
 
 You can supply a configuration file from the CLI or use the default one under ~./.pmcli.cfg. The format is:
-
+```
 [default]
 host = <marathonhost>
 user = <username>
 password = <password>
 format = <output format>
 port = <marathon port>
-
+```
 format can be:
 
 * human  (simplified columns)
@@ -33,6 +33,7 @@ format can be:
 
 You can have different marathon hosts in the file and specify it from the CLI with the '-p' switch
 
+```
 [default]
 host = <marathonhost1>
 user = <username1>
@@ -46,9 +47,12 @@ user = <username2>
 password = <password2>
 format = <output format2>
 port = <marathon port2>
+```
 
 ## Usage
 
+```
+pmcli <flags...> [section] [action]
  <flags...> [section] [action]
     ├─ app
     │    └─┬─ list                          - list all apps
@@ -100,6 +104,7 @@ port = <marathon port2>
        jsonpp (json pretty printed, default)
        raw    (the exact response from Marathon)
   -F Force operation
+```
 
 ## TO DO
 
@@ -115,8 +120,8 @@ I'm open to any suggestion
 
 Still doesn't works "pmcli app update [option]". This will be my first priority in the developement
 
-## Web page
+## Personal web page
 
-[cookingdevops.blogspot.com]
+[Cooking devops](http://cookingdevops.blogspot.com)
 
 
