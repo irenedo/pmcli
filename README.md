@@ -1,9 +1,10 @@
 # pmcli
-Marathon CLI written in python. Based on Marathonctl
+
+Multi-platform Marathon CLI written in python using its REST API
 
 ## Installation
 
-Just needs a python interpreter (2.x or 3.x) and this very common python modules:
+Just needs a python interpreter (tested in 2.x) and this python modules:
 
 - sys
 - os
@@ -61,9 +62,8 @@ pmcli <flags...> [section] [action]
     │      ├─ show [appid] [version]        - show config and status of app of appid and version
     │      ├─ create [jsonfile]             - deploy application defined in jsonfile
     │      ├─ update [appid] [jsonfile]     - update application appid as defined in jsonfile
-    │      ├─ update cpu [appid] [cpu%]     - update application appid to have cpu% of cpu share
-    │      ├─ update memory [appid] [MB]    - update application appid to have MB of memory
-    │      ├─ update instances [appid] [N]  - update application appid to have N instances
+    │      ├─ change [opt] [appid] [value]  - change appid option 'opt' to 'value'
+    │      ├─ scale [appid] [N]  	    - Scale application appid to have N instances
     │      ├─ restart [appid]               - restart app of appid
     │      └─ destroy [appid]               - destroy and remove all instances of appid
     │
@@ -113,12 +113,14 @@ pmcli <flags...> [section] [action]
 - Option to reset launch delay in an app
 - Events stream (?)
 - Share it from a docker container
+- Test it with python 3.x
+- Test it in other platform different than linux
 
-I'm open to any suggestion
+I'm opened to any suggestion
 
 ## Known bugs
 
-Still doesn't works "pmcli app update [option]". This will be my first priority in the developement
+Still doesn't work "pmcli app change" and "pmcli app scale". This is my first priority in the developement
 
 ## Personal web page
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Marathon CLI based on marathonctl and written in python
+Multi-platform Marathon CLI written in python using its REST API
 """
 import sys
 import os
@@ -33,7 +33,7 @@ def printusage(usage):
     Prints all pmcli usage
     :param usage: dictinary with all pmcli parts
     """
-    print(u"""pmcli <flags...> [section] [action]""")
+    print(u"""\npmcli <flags...> [section] [action]""")
     for section in usage:
         printpart(section, 0)
 
@@ -76,7 +76,7 @@ def printhuman(dictionary, ident='', braces=1):
 
     for key, value in tempdict.iteritems():
         if isinstance(value, dict):
-            print '%s%s%s%s' % (ident, braces*'[', key, braces*']')
+            print('%s%s%s%s' % (ident, braces*'[', key, braces*']'))
             printhuman(value, ident+'  ', braces+1)
         elif isinstance(value, list):
             ndict = 0
@@ -394,7 +394,7 @@ def updateappid(arg, opts):
 
 
 # Still don't work
-def updateappcpu(arg, opts):
+def changeoption(arg, opts):
     f = ''
     if opts['force']:
             f = '?force=true'
@@ -420,7 +420,7 @@ def updateappcpu(arg, opts):
 
 
 # Still don't work
-def updateappmemory(arg, opts):
+def scaleapp(arg, opts):
     pass
 
 
@@ -766,9 +766,8 @@ app = u"""
     │      ├─ show [appid] [version]        - show config and status of app of appid and version
     │      ├─ create [jsonfile]             - deploy application defined in jsonfile
     │      ├─ update [appid] [jsonfile]     - update application appid as defined in jsonfile
-    │      ├─ update cpu [appid] [cpu%]     - update application appid to have cpu% of cpu share
-    │      ├─ update memory [appid] [MB]    - update application appid to have MB of memory
-    │      ├─ update instances [appid] [N]  - update application appid to have N instances
+    │      ├─ change [opt] [appid] [value]  - change appid option 'opt' to 'value'
+    │      ├─ scale [appid] [N]             - Scale application appid to have N instances
     │      ├─ restart [appid]               - restart app of appid
     │      └─ destroy [appid]               - destroy and remove all instances of appid
     │"""
@@ -860,16 +859,23 @@ if 'app' in sys.argv:
             sys.exit(2)
     elif argum[0].lower() == 'update':
         try:
-            if argum[1] == 'cpu':
-                updateappcpu(argum, options)
-            elif argum[1] == 'memory':
-                updateappmemory(argum, options)
-            elif argum[1] == 'instances':
-                updateappinstances(argum, options)
-            else:
-                updateappid(argum, options)
+            updateappid(argum, options)
         except IndexError:
-            print(u'Incorrect call to update app')
+            print(u'Incorrect call to \'app update\'')
+            printpart(usage[0], 6)
+            sys.exit(2)
+    elif argum[0].lower() == 'change':
+        try:
+            changeoption(argum, options)
+        except IndexError:
+            print(u'Incorrect call to \'app change\'')
+            printpart(usage[0], 6)
+            sys.exit(2)
+    elif argum[0].lower() == 'scale':
+        try:
+            scaleapp(argum, options)
+        except IndexError:
+            print(u'Incorrect call to \'app scale\'')
             printpart(usage[0], 6)
             sys.exit(2)
     elif argum[0].lower() == 'restart':
