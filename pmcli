@@ -15,65 +15,27 @@ __author__ = "Iván Renedo"
 __copyright__ = "GPL"
 
 
-def printusage():
+def printpart(text, ident):
     """
-    Just prints pmcli usage syntax
+    Prints pmcli usage
+    :param text: text to show
+    :param ident: Indentation
+    :return: text without the first 'ident' characters from every line
     """
-    print(u"""
-pmcli <flags...> [action] <args...>
-    ├─ app
-    │    └─┬─ list                          - list all apps
-    │      ├─ versions [appid]              - list all versions of apps of appid
-    │      ├─ show [appid]                  - show config and status of app of appid (latest version)
-    │      ├─ show [appid] [version]        - show config and status of app of appid and version
-    │      ├─ create [jsonfile]             - deploy application defined in jsonfile
-    │      ├─ update [appid] [jsonfile]     - update application appid as defined in jsonfile
-    │      ├─ update cpu [appid] [cpu%]     - update application appid to have cpu% of cpu share
-    │      ├─ update memory [appid] [MB]    - update application appid to have MB of memory
-    │      ├─ update instances [appid] [N]  - update application appid to have N instances
-    │      ├─ restart [appid]               - restart app of appid
-    │      └─ destroy [appid]               - destroy and remove all instances of appid
-    │
-    ├─ task
-    │     └─┬─ list                       - list all tasks
-    │       ├─ list [appid]               - list tasks of app of appid
-    │       ├─ kill [appid]               - kill all tasks of app appid
-    │       ├─ killtask [appid] [taskid]  - kill task taskid of app appid
-    │       └─ queue                      - list all queued tasks
-    │
-    ├─ group
-    │      └─┬─ list                        - list all groups
-    │        ├─ list [groupid]              - list groups in groupid
-    │        ├─ create [jsonfile]           - create a group defined in jsonfile
-    │        ├─ update [groupid] [jsonfile] - update group groupid as defined in jsonfile
-    │        └─ destroy [groupid]           - destroy group of groupid
-    │
-    ├─ deploy
-    │       └─┬─ list                - list all active deploys
-    │         └─ destroy [deployid]  - cancel deployment of [deployid]
-    │
-    └── marathon
-               └─┬─ leader    - get the current Marathon leader
-                 ├─ abdicate  - force the current leader to relinquish control
-                 ├─ ping      - ping Marathon master host[s]
-                 ├─ info      - get info about marathon instance
-                 └─ metrics   - get marathon metrics
+    res = u''
+    for line in text.split('\n'):
+        res = res + line[ident:] + '\n'
+    print(res[1:-1])
 
- Flags
-  -c [config file]
-  -h [host]
-  -P [port] Marathon port
-  -u [user:password] (separated by colon)
-  -p [profile] (profile used in the config file)
-  -o [output file] (json format. Overrides -f flag)
-  -f [format]
-       human  (simplified columns)
-       json   (json on one line)
-       jsonpp (json pretty printed, default)
-       raw    (the exact response from Marathon)
-  -F Force operation
 
-""")
+def printusage(usage):
+    """
+    Prints all pmcli usage
+    :param usage: dictinary with all pmcli parts
+    """
+    print(u"""pmcli <flags...> [section] [action]""")
+    for section in usage:
+        printpart(section, 0)
 
 
 def getch():
@@ -134,13 +96,14 @@ def printhuman(dictionary, ident='', braces=1):
             print(ident+'%s : %s' % (key, value))
 
 
-def getconfig(arguments):
+def getconfig(arguments, outputtext):
     """
     Gets the arguments options and puts it in the opts dictionary
     :param arguments: arguments used to call pmcli
+    :param outputtext: usage text to print output
     """
     opts = {'host': ' ', 'username': '', 'password': '', 'outputformat': 'human', 'file': False,
-            'outputfile': '', 'port': '8080', 'force': False }
+            'outputfile': '', 'port': '8080', 'force': False}
     configfile = os.path.expanduser("~/.pmcli.cfg")
     if '-c' in arguments:
         index = arguments.index('-c')
@@ -187,17 +150,16 @@ def getconfig(arguments):
         try:
             opts['username'], opts['password'] = userpass.split(':')
         except:
-            print(u'there was some error reading you username and password.\n'
-                  u'Format: \'username:password\' format')
-            printusage()
+            print(u'there was some error reading you username and password')
+            printpart(outputtext[5], 0)
             sys.exit(2)
 
     if '-f' in arguments:
         index = arguments.index('-f')
         opts['outputformat'] = arguments[index+1]
         if opts['outputformat'] not in ['json', 'human', 'jsonpp', 'raw']:
-            print(u'Unknown output format [\'json\', \'human\', \'jsonpp\', \'raw\']')
-            printusage()
+            print(u'Unknown output format')
+            printpart(outputtext[5], 0)
             sys.exit(2)
 
     if '-o' in arguments:
@@ -334,7 +296,7 @@ def createapp(filename, opts):
     :param opts: options used to connect and print the result
     """
     try:
-        content = open(filename,'rb').read()
+        content = open(filename, 'rb').read()
         resp = requests.post('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/', data=content)
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
@@ -795,21 +757,87 @@ def getmetrics(opts):
     printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
 
 
+# Usage parts
+app = u"""
+    ├─ app
+    │    └─┬─ list                          - list all apps
+    │      ├─ versions [appid]              - list all versions of apps of appid
+    │      ├─ show [appid]                  - show config and status of app of appid (latest version)
+    │      ├─ show [appid] [version]        - show config and status of app of appid and version
+    │      ├─ create [jsonfile]             - deploy application defined in jsonfile
+    │      ├─ update [appid] [jsonfile]     - update application appid as defined in jsonfile
+    │      ├─ update cpu [appid] [cpu%]     - update application appid to have cpu% of cpu share
+    │      ├─ update memory [appid] [MB]    - update application appid to have MB of memory
+    │      ├─ update instances [appid] [N]  - update application appid to have N instances
+    │      ├─ restart [appid]               - restart app of appid
+    │      └─ destroy [appid]               - destroy and remove all instances of appid
+    │"""
+
+task = u"""
+    ├─ task
+    │     └─┬─ list                       - list all tasks
+    │       ├─ list [appid]               - list tasks of app of appid
+    │       ├─ kill [appid]               - kill all tasks of app appid
+    │       ├─ killtask [appid] [taskid]  - kill task taskid of app appid
+    │       └─ queue                      - list all queued tasks"""
+
+group = u"""
+    │
+    ├─ group
+    │      └─┬─ list                        - list all groups
+    │        ├─ list [groupid]              - list groups in groupid
+    │        ├─ create [jsonfile]           - create a group defined in jsonfile
+    │        ├─ update [groupid] [jsonfile] - update group groupid as defined in jsonfile
+    │        └─ destroy [groupid]           - destroy group of groupid"""
+
+
+deploy = u"""
+    │
+    ├─ deploy
+    │       └─┬─ list                - list all active deploys
+    │         └─ destroy [deployid]  - cancel deployment of [deployid]"""
+
+marathon = u"""
+    │
+    └─ marathon
+              └─┬─ leader    - get the current Marathon leader
+                ├─ abdicate  - force the current leader to relinquish control
+                ├─ ping      - ping Marathon master host[s]
+                ├─ info      - get info about marathon instance
+                └─ metrics   - get marathon metrics"""
+
+flags = u"""
+ Flags
+  -c [config file]
+  -h [host]
+  -P [port] Marathon port
+  -u [user:password] (separated by colon)
+  -p [profile] (profile used in the config file)
+  -o [output file] (json format. Overrides -f flag)
+  -f [format]
+       human  (simplified columns)
+       json   (json on one line)
+       jsonpp (json pretty printed, default)
+       raw    (the exact response from Marathon)
+  -F Force operation"""
+
+usage = [app, task, group, deploy, marathon, flags]
+
 # MAIN
 
 if len(sys.argv) <= 1:
     print("Incorrect number of arguments")
-    printusage()
+    printusage(usage)
     sys.exit(2)
 
-options = getconfig(sys.argv)
+options = getconfig(sys.argv, usage)
 
 if 'app' in sys.argv:
     idx = sys.argv.index('app')
     argum = sys.argv[idx+1:]
     if not argum:
         print(u'Action \'app\' has no arguments')
-        printusage()
+        printpart(usage[0], 6)
         sys.exit(2)
 
     if argum[0].lower() == 'list':
@@ -819,7 +847,7 @@ if 'app' in sys.argv:
             listappversions(argum[1], options)
         except IndexError:
             print(u'You must supply an application index')
-            printusage()
+            printpart(usage[0], 6)
             sys.exit(2)
     elif argum[0].lower() == 'show':
             listappid(argum, options)
@@ -828,7 +856,7 @@ if 'app' in sys.argv:
             createapp(argum[1], options)
         except IndexError:
             print(u'You must supply a file name')
-            printusage()
+            printpart(usage[0], 6)
             sys.exit(2)
     elif argum[0].lower() == 'update':
         try:
@@ -842,25 +870,25 @@ if 'app' in sys.argv:
                 updateappid(argum, options)
         except IndexError:
             print(u'Incorrect call to update app')
-            printusage()
+            printpart(usage[0], 6)
             sys.exit(2)
     elif argum[0].lower() == 'restart':
         try:
             restartapp(argum[1], options)
         except IndexError:
             print(u'You must supply an application index')
-            printusage()
+            printpart(usage[0], 6)
             sys.exit(2)
     elif argum[0].lower() == 'destroy':
         try:
             destroyapp(argum, options)
         except IndexError:
             print(u'You must supply an application index')
-            printusage()
+            printpart(usage[0], 6)
             sys.exit(2)
     else:
-        print(u'No proper argument to \'app\' action detected')
-        printusage()
+        print(u'No proper argument to \'app\' section detected')
+        printpart(usage[0], 6)
         sys.exit(2)
 
 elif 'task' in sys.argv:
@@ -868,7 +896,7 @@ elif 'task' in sys.argv:
     argum = sys.argv[idx+1:]
     if not argum:
         print(u'Action \'task\' has no arguments')
-        printusage()
+        printpart(usage[1], 6)
         sys.exit(2)
 
     if argum[0].lower() == 'list':
@@ -878,8 +906,8 @@ elif 'task' in sys.argv:
     elif argum[0].lower() == 'queue':
         listqueue(options)
     else:
-        print(u'No proper argument to \'task\' action detected')
-        printusage()
+        print(u'No proper argument to \'task\' section detected')
+        printpart(usage[1], 6)
         sys.exit(2)
 
 elif 'group' in sys.argv:
@@ -887,7 +915,7 @@ elif 'group' in sys.argv:
     argum = sys.argv[idx+1:]
     if not argum:
         print(u'Action \'group\' has no arguments')
-        printusage()
+        printpart(usage[2], 6)
         sys.exit(2)
 
     if argum[0].lower() == 'list':
@@ -899,8 +927,8 @@ elif 'group' in sys.argv:
     elif argum[0].lower() == 'destroy':
         destroygroup(argum, options)
     else:
-        print(u'No proper argument to \'group\' action detected')
-        printusage()
+        print(u'No proper argument to \'group\' section detected')
+        printpart(usage[2], 6)
         sys.exit(2)
 
 elif 'deploy' in sys.argv:
@@ -908,7 +936,7 @@ elif 'deploy' in sys.argv:
     argum = sys.argv[idx+1:]
     if not argum:
         print(u'Action \'deploy\' has no arguments')
-        printusage()
+        printpart(usage[3], 6)
         sys.exit(2)
 
     if argum[0].lower() == 'list':
@@ -918,11 +946,11 @@ elif 'deploy' in sys.argv:
             destroydeployment(argum[1], options)
         except IndexError:
             print(u'You must supply a deploy id')
-            printusage()
+            printpart(usage[3], 6)
             sys.exit(2)
     else:
-        print(u'No proper argument to \'deploy\' action detected')
-        printusage()
+        print(u'No proper argument to \'deploy\' section detected')
+        printpart(usage[3], 6)
         sys.exit(2)
 
 elif 'marathon' in sys.argv:
@@ -930,7 +958,7 @@ elif 'marathon' in sys.argv:
     argum = sys.argv[idx+1:]
     if not argum:
         print(u'Action \'marathon\' has no arguments')
-        printusage()
+        printpart(usage[4], 6)
         sys.exit(2)
 
     if argum[0].lower() == 'leader':
@@ -944,12 +972,12 @@ elif 'marathon' in sys.argv:
     elif argum[0].lower() == 'metrics':
         getmetrics(options)
     else:
-        print(u'No proper argument to \'marathon\' action detected')
-        printusage()
+        print(u'No proper argument to \'marathon\' section detected')
+        printpart(usage[4], 6)
         sys.exit(2)
 else:
     print(u'No proper action detected')
-    printusage()
+    printusage(usage)
     sys.exit(2)
 
 sys.exit(0)
