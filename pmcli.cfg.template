@@ -1,7 +1,6 @@
 [default]
 host = mesosmaster
 port = 8080
-authentication = 1
 user = testuser
 password = testpassword
 format = jsonpp

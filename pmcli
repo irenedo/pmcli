@@ -67,12 +67,14 @@ pmcli <flags...> [action] <args...>
   -p [profile] (profile used in the config file)
   -o [output file] (json format. Overrides -f flag)
   -f [format]
-       human  (simplified columns, default)
+       human  (simplified columns)
        json   (json on one line)
-       jsonpp (json pretty printed)
+       jsonpp (json pretty printed, default)
        raw    (the exact response from Marathon)
+  -F Force operation
 
 """)
+
 
 def getch():
     """
@@ -137,8 +139,8 @@ def getconfig(arguments):
     Gets the arguments options and puts it in the opts dictionary
     :param arguments: arguments used to call pmcli
     """
-    opts = {'host': ' ', 'authentication': 0, 'username': '', 'password': '', 'outputformat': 'human', 'file': False,
-            'outputfile': '', 'port': '8080'}
+    opts = {'host': ' ', 'username': '', 'password': '', 'outputformat': 'human', 'file': False,
+            'outputfile': '', 'port': '8080', 'force': False }
     configfile = os.path.expanduser("~/.pmcli.cfg")
     if '-c' in arguments:
         index = arguments.index('-c')
@@ -164,7 +166,6 @@ def getconfig(arguments):
 
     try:
         opts['host'] = cfg.get(mesosprofile, 'host')
-        opts['authentication'] = cfg.get(mesosprofile, 'authentication')
         opts['username'] = cfg.get(mesosprofile, 'user')
         opts['password'] = cfg.get(mesosprofile, 'password')
         opts['outputformat'] = cfg.get(mesosprofile, 'format')
@@ -185,7 +186,6 @@ def getconfig(arguments):
         userpass = arguments[index+1]
         try:
             opts['username'], opts['password'] = userpass.split(':')
-            opts['authentication'] = 1
         except:
             print(u'there was some error reading you username and password.\n'
                   u'Format: \'username:password\' format')
@@ -209,6 +209,9 @@ def getconfig(arguments):
         index = arguments.index('-P')
         opts['port'] = arguments[index+1]
 
+    if '-F' in arguments:
+        opts['force'] = True
+
     return opts
 
 
@@ -220,16 +223,39 @@ def printoutput(result, outputformat, tofile, ofile):
     :param tofile: boolean. Says if the output must be a file
     :param ofile: File to write the result
     """
+    if result.status_code == 401:
+        print(u'Authorization required or wrong username/password')
+        sys.exit(2)
+
     if tofile:
-        with io.open(ofile, 'w', encoding='utf-8') as f:
-            f.write(unicode(json.dumps(result.json(), indent=2, ensure_ascii=False)))
+        ch = ''
+        if os.path.isfile(ofile):
+            print(u'Output file exists. Do you really want to overwrite it? (y/N)')
+            ch = getch()
+        if ch not in ['y', 'Y']:
+            sys.exit(0)
+
+        try:
+            with io.open(ofile, 'w', encoding='utf-8') as f:
+                f.write(unicode(json.dumps(result.json(), indent=2, ensure_ascii=False)))
+        except IOError as e:
+            print(u'Can\'t write output file: ' + e[1])
+            sys.exit(2)
     else:
         if outputformat == 'json':
-            print(result.json())
+            try:
+                print(result.json())
+            except ValueError:
+                print(u'Unknown error parsing result')
+                sys.exit(2)
         elif outputformat == 'jsonpp':
-            print(json.dumps(result.json(), indent=2))
+            try:
+                print(json.dumps(result.json(), indent=2))
+            except ValueError:
+                print(u'Unknown error parsing result')
+                sys.exit(2)
         elif outputformat == 'human':
-            printhuman(result.json())
+                printhuman(result.json())
         elif outputformat == 'raw':
             print(result.text)
 
@@ -241,7 +267,8 @@ def listapps(opts):
     :param opts: options used to connect and print the result
     """
     try:
-        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/')
+        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/',
+                            auth=(opts['username'], opts['password']))
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
@@ -261,14 +288,15 @@ def listappid(arg, opts):
     if len(arg) >= 3:
         try:
             resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + arg[1] +
-                                '/versions/' + arg[2])
+                                '/versions/' + arg[2], auth=(opts['username'], opts['password']))
         except requests.exceptions.ConnectionError as e:
             print(u'Error connecting to host')
             print(e[0][1])
             sys.exit(2)
     else:
         try:
-            resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + arg[1])
+            resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + arg[1],
+                                auth=(opts['username'], opts['password']))
         except requests.exceptions.ConnectionError as e:
             print(u'Error connecting to host')
             print(e[0][1])
@@ -289,7 +317,8 @@ def listappversions(appid, opts):
     :param opts: options used to connect and print the result
     """
     try:
-        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + appid + '/versions')
+        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + appid + '/versions',
+                            auth=(opts['username'], opts['password']))
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
@@ -333,15 +362,20 @@ def destroyapp(arg, opts):
         print(u'Do you really want to destroy ' + arg[1] + u' application? (y/N)')
         chose = getch()
         if chose in ['y', 'Y']:
+            f = ''
+            if opts['force']:
+                f = '?force=true'
+
             try:
-                resp = requests.delete('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + arg[1])
+                resp = requests.delete('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + arg[1] + f,
+                                       auth=(opts['username'], opts['password']))
             except requests.exceptions.ConnectionError as e:
                 print(u'Error connecting to host')
                 print(e[0][1])
                 sys.exit(2)
             printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
         else:
-            sys.exit(2)
+            sys.exit(0)
     else:
         sys.exit(2)
 
@@ -353,8 +387,13 @@ def restartapp(appid, opts):
     :param appid: appid to restart
     :param opts: options used to connect and print the result
     """
+    f = ''
+    if opts['force']:
+        f = '?force=true'
+
     try:
-        resp = requests.post('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + appid + '/restart')
+        resp = requests.post('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + appid + '/restart/' + f,
+                             auth=(opts['username'], opts['password']))
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
@@ -369,9 +408,14 @@ def updateappid(arg, opts):
     :param arg: arg[1] -> appid , arg[2] -> json file
     :param opts: options used to connect and print the result
     """
+    f = ''
+    if opts['force']:
+            f = '?force=true'
+
     try:
         content = open(arg[2], 'rb').read()
-        resp = requests.put('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + arg[1], data=content)
+        resp = requests.put('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + arg[1] + f, data=content,
+                            auth=(opts['username'], opts['password']))
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
@@ -389,8 +433,13 @@ def updateappid(arg, opts):
 
 # Still don't work
 def updateappcpu(arg, opts):
+    f = ''
+    if opts['force']:
+            f = '?force=true'
+
     try:
-        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + arg[2])
+        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + arg[2] + f,
+                            auth=(opts['username'], opts['password']))
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
@@ -464,20 +513,27 @@ def killtasks(arg, opts):
             print(u'Do you really want to destroy task ' + arg[2] + u' from application ' + arg[1] + u'? (y/N)')
             chose = getch()
             if chose in ['y', 'Y']:
-               call = 'http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + arg[1] + '/tasks/' + arg[2]
+                f = ''
+                if opts['force']:
+                        f = '?force=true'
+
+                call = 'http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + arg[1] + '/tasks/' + arg[2] + f
             else:
-                sys.exit(2)
+                sys.exit(0)
     else:
         # If not, the order is to kill all tasks from appid
         if listtasks(arg, opts):
             print(u'Do you really want to destroy all tasks from application ' + arg[1] + u'? (y/N)')
             chose = getch()
             if chose in ['y', 'Y']:
-                call = 'http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + arg[1] + '/tasks'
+                f = ''
+                if opts['force']:
+                        f = '?force=true'
+                call = 'http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + arg[1] + '/tasks/' + f
             else:
-                sys.exit(2)
+                sys.exit(0)
     try:
-        resp = requests.delete(call)
+        resp = requests.delete(call, auth=(opts['username'], opts['password']))
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
@@ -492,7 +548,8 @@ def listqueue(opts):
     :param opts: options used to connect and print the result
     """
     try:
-        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/queue/')
+        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/queue/',
+                            auth=(opts['username'], opts['password']))
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
@@ -515,14 +572,16 @@ def listgroups(arg, opts):
     """
     if len(arg) >= 2:
         try:
-            resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/groups/' + arg[1])
+            resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/groups/' + arg[1],
+                                auth=(opts['username'], opts['password']))
         except requests.exceptions.ConnectionError as e:
             print(u'Error connecting to host')
             print(e[0][1])
             sys.exit(2)
     else:
         try:
-            resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/groups/')
+            resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/groups/',
+                                auth=(opts['username'], opts['password']))
         except requests.exceptions.ConnectionError as e:
             print(u'Error connecting to host')
             print(e[0][1])
@@ -543,7 +602,8 @@ def creategroup(filename, opts):
     """
     try:
         content = open(filename, 'rb').read()
-        resp = requests.post('http://' + opts['host'] + ':' + opts['port'] + '/v2/groups/', data=content)
+        resp = requests.post('http://' + opts['host'] + ':' + opts['port'] + '/v2/groups/', data=content,
+                             auth=(opts['username'], opts['password']))
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
@@ -567,7 +627,11 @@ def updategroup(arg, opts):
     """
     try:
         content = open(arg[2], 'rb').read()
-        resp = requests.put('http://' + opts['host'] + ':' + opts['port'] + '/v2/groups/' + arg[1], data=content)
+        f = ''
+        if opts['force']:
+            f = '?force=true'
+        resp = requests.put('http://' + opts['host'] + ':' + opts['port'] + '/v2/groups/' + arg[1] + f, data=content,
+                            auth=(opts['username'], opts['password']))
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
@@ -597,15 +661,19 @@ def destroygroup(arg, opts):
         print(u'Do you really want to destroy ' + arg[1] + u' group? (y/N)')
         chose = getch()
         if chose in ['y', 'Y']:
+            f = ''
+            if opts['force']:
+                    f = '?force=true'
             try:
-                resp = requests.delete('http://' + opts['host'] + ':' + opts['port'] + '/v2/groups/' + arg[1])
+                resp = requests.delete('http://' + opts['host'] + ':' + opts['port'] + '/v2/groups/' + arg[1] + f,
+                                       auth=(opts['username'], opts['password']))
             except requests.exceptions.ConnectionError as e:
                 print(u'Error connecting to host')
                 print(e[0][1])
                 sys.exit(2)
             printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
         else:
-            sys.exit(2)
+            sys.exit(0)
     else:
         sys.exit(2)
 
@@ -617,7 +685,8 @@ def listdeploys(opts):
     :param opts: options used to connect and print the result
     """
     try:
-        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/deployments/')
+        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/deployments/',
+                            auth=(opts['username'], opts['password']))
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
@@ -633,7 +702,11 @@ def destroydeployment(deployid, opts):
     :param opts: options used to connect and print the result
     """
     try:
-        resp = requests.delete('http://' + opts['host'] + ':' + opts['port'] + '/v2/deployments/' + deployid)
+        f = ''
+        if opts['force']:
+            f = '?force=true'
+        resp = requests.delete('http://' + opts['host'] + ':' + opts['port'] + '/v2/deployments/' + deployid + f,
+                               auth=(opts['username'], opts['password']))
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
@@ -649,7 +722,8 @@ def getcurrentleader(opts):
     :param opts: options used to connect and print the result
     """
     try:
-        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/leader/')
+        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/leader/',
+                            auth=(opts['username'], opts['password']))
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
@@ -664,7 +738,8 @@ def forcerelinquish(opts):
     :param opts: options used to connect and print the result
     """
     try:
-        resp = requests.delete('http://' + opts['host'] + ':' + opts['port'] + '/v2/leader/')
+        resp = requests.delete('http://' + opts['host'] + ':' + opts['port'] + '/v2/leader/',
+                               auth=(opts['username'], opts['password']))
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
@@ -678,7 +753,8 @@ def pingmaster(opts):
     :param opts: options used to connect
     """
     try:
-        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/ping')
+        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/ping',
+                            auth=(opts['username'], opts['password']))
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
@@ -694,7 +770,8 @@ def getinfo(opts):
     :return:
     """
     try:
-        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/info/')
+        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/info/',
+                            auth=(opts['username'], opts['password']))
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
@@ -709,7 +786,8 @@ def getmetrics(opts):
     :param opts: options used to connect and print the result
     """
     try:
-        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/metrics')
+        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/metrics',
+                            auth=(opts['username'], opts['password']))
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
