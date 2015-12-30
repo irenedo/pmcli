@@ -1,10 +1,10 @@
 # pmcli
 
-Multi-platform Marathon CLI written in python using its REST API
+Multi-platform Marathon CLI written in python.
 
 ## Installation
 
-Just needs a python interpreter (tested in 2.x) and this python modules:
+Needs a python interpreter (tested in 2.x) and this modules:
 
 - sys
 - os
@@ -17,6 +17,7 @@ Just needs a python interpreter (tested in 2.x) and this python modules:
 ## Configuration
 
 You can supply a configuration file from the CLI or use the default one under ~./.pmcli.cfg. The format is:
+
 ```
 [default]
 host = <marathonhost>
@@ -32,7 +33,7 @@ format can be:
 * jsonpp (json pretty printed, default)
 * raw    (the exact response from Marathon)
 
-You can have different marathon hosts in the file and specify it from the CLI with the '-p' switch
+You can have different marathon hosts (profiles) in the file and specify the one to use from the CLI with the '-p' switch
 
 ```
 [default]
@@ -54,36 +55,35 @@ port = <marathon port2>
 
 ```
 pmcli <flags...> [section] [action]
- <flags...> [section] [action]
     ├─ app
-    │    └─┬─ list                          - list all apps
-    │      ├─ versions [appid]              - list all versions of apps of appid
-    │      ├─ show [appid]                  - show config and status of app of appid (latest version)
-    │      ├─ show [appid] [version]        - show config and status of app of appid and version
-    │      ├─ create [jsonfile]             - deploy application defined in jsonfile
-    │      ├─ update [appid] [jsonfile]     - update application appid as defined in jsonfile
-    │      ├─ change [opt] [appid] [value]  - change appid option 'opt' to 'value'
-    │      ├─ scale [appid] [N]  	    - Scale application appid to have N instances
-    │      ├─ restart [appid]               - restart app of appid
-    │      └─ destroy [appid]               - destroy and remove all instances of appid
+    │    └─┬─ list                            - list all apps
+    │      ├─ versions [appid]                - list all versions of 'appid'
+    │      ├─ show [appid]                    - show config and status of 'appid' (latest version)
+    │      ├─ showversion [appid] [versionid] - show config and status of 'appid' and 'versionid'
+    │      ├─ create [jsonfile]               - deploy application defined in jsonfile
+    │      ├─ update [appid] [jsonfile]       - update application 'appid' as defined in jsonfile
+    │      ├─ change [opt] [appid] [value]    - change appid option 'opt' to 'value'
+    │      ├─ scale [appid] [N]               - Scale application 'appid' to have N instances
+    │      ├─ restart [appid]                 - restart app of 'appid'
+    │      └─ destroy [appid]                 - destroy and remove all instances of 'appid'
     │
     ├─ task
     │     └─┬─ list                       - list all tasks
-    │       ├─ list [appid]               - list tasks of app of appid
-    │       ├─ kill [appid]               - kill all tasks of app appid
-    │       ├─ killtask [appid] [taskid]  - kill task taskid of app appid
+    │       ├─ show [appid]               - list tasks of app of 'appid'
+    │       ├─ kill [appid]               - kill all tasks of 'appid'
+    │       ├─ killtask [appid] [taskid]  - kill task 'taskid' of app 'appid'
     │       └─ queue                      - list all queued tasks
     │
     ├─ group
     │      └─┬─ list                        - list all groups
-    │        ├─ list [groupid]              - list groups in groupid
+    │        ├─ show [groupid]              - list groups in 'groupid'
     │        ├─ create [jsonfile]           - create a group defined in jsonfile
-    │        ├─ update [groupid] [jsonfile] - update group groupid as defined in jsonfile
-    │        └─ destroy [groupid]           - destroy group of groupid
+    │        ├─ update [groupid] [jsonfile] - update 'groupid' as defined in jsonfile
+    │        └─ destroy [groupid]           - destroy group of 'groupid'
     │
     ├─ deploy
     │       └─┬─ list                - list all active deploys
-    │         └─ destroy [deployid]  - cancel deployment of [deployid]
+    │         └─ destroy [deployid]  - cancel deployment of 'deployid'
     │
     └─ marathon
               └─┬─ leader    - get the current Marathon leader
@@ -102,12 +102,14 @@ pmcli <flags...> [section] [action]
        human  (simplified columns)
        json   (json on one line)
        jsonpp (json pretty printed, default)
-       raw    (the exact response from Marathon)
+       raw    (unprocessed reply from Marathon)
   -F Force operation
+
 ```
 
 ## TO DO
 
+- Support SSL
 - Update resources from command line
 - Events subscriptions (?)
 - Option to reset launch delay in an app

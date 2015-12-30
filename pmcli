@@ -15,6 +15,19 @@ __author__ = "Iván Renedo"
 __copyright__ = "GPL"
 
 
+def checkargs(call, number, section):
+    """
+    Check if call to 'pmcli <call> <arguments>' doesn't exceed the number of arguments
+    :param call: list containing the arguments
+    :param number: number of arguments the call must have
+    :param section: usage section to show
+    """
+    if len(call[1:]) > number:
+        print(u'Syntax error executing \'pmcli ' + call[0] + u'\'')
+        printpart(usage[section], 6)
+        sys.exit(2)
+
+
 def printpart(text, ident):
     """
     Prints pmcli usage
@@ -238,37 +251,46 @@ def listapps(opts):
     printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
 
 
-def listappid(arg, opts):
+def listappid(appid, opts):
     """
-    Lists an app by its appid.
+    Lists an app config by appid.
         GET /v2/apps/{appId}
-        GET /v2/apps/{appId}/versions/{version}
-    :param arg: if more than 3 arguments: arg[1] -> appid, arg[2] -> version, else show all running tasks from arg[1]
+    :param appid: app Id
     :param opts: options used to connect and print the result
     :return: True if appid exists, False if not
     """
-    if len(arg) >= 3:
-        try:
-            resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + arg[1] +
-                                '/versions/' + arg[2], auth=(opts['username'], opts['password']))
-        except requests.exceptions.ConnectionError as e:
-            print(u'Error connecting to host')
-            print(e[0][1])
-            sys.exit(2)
-    else:
-        try:
-            resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + arg[1],
-                                auth=(opts['username'], opts['password']))
-        except requests.exceptions.ConnectionError as e:
-            print(u'Error connecting to host')
-            print(e[0][1])
-            sys.exit(2)
+    try:
+        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + appid,
+                            auth=(opts['username'], opts['password']))
+    except requests.exceptions.ConnectionError as e:
+        print(u'Error connecting to host')
+        print(e[0][1])
+        sys.exit(2)
+
     printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
     # If exists 'message' key in the returned dictionary is that the app doesn't exists
     if 'message' in resp.json().keys():
         return False
     else:
         return True
+
+
+def showversion(appid, versionid, opts):
+    """
+    Lists an app by its appid.
+        GET /v2/apps/{appId}/versions/{version}
+    :param appid: app Id
+    :param versionid: version Id
+    :param opts: options used to connect and print the result
+    """
+    try:
+        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + appid +
+                            '/versions/' + versionid, auth=(opts['username'], opts['password']))
+    except requests.exceptions.ConnectionError as e:
+        print(u'Error connecting to host')
+        print(e[0][1])
+        sys.exit(2)
+    printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
 
 
 def listappversions(appid, opts):
@@ -312,16 +334,16 @@ def createapp(filename, opts):
     printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
 
 
-def destroyapp(arg, opts):
+def destroyapp(appid, opts):
     """
     Destroys a marathon app with its given appid.
         DELETE /v2/apps/{appId}
-    :param arg: arg[1] -> appid
+    :param appid: app Id
     :param opts: options used to connect and print the result
     :return:
     """
-    if listappid(arg, opts):
-        print(u'Do you really want to destroy ' + arg[1] + u' application? (y/N)')
+    if listappid(appid, opts):
+        print(u'Do you really want to destroy ' + appid + u' application? (y/N)')
         chose = getch()
         if chose in ['y', 'Y']:
             f = ''
@@ -329,7 +351,7 @@ def destroyapp(arg, opts):
                 f = '?force=true'
 
             try:
-                resp = requests.delete('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + arg[1] + f,
+                resp = requests.delete('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + appid + f,
                                        auth=(opts['username'], opts['password']))
             except requests.exceptions.ConnectionError as e:
                 print(u'Error connecting to host')
@@ -424,82 +446,88 @@ def scaleapp(arg, opts):
     pass
 
 
-# Still don't work
-def updateappinstances(arg, opts):
-    pass
-
-
-def listtasks(arg, opts):
+def listtasks(opts):
     """
-    List all tasks in marathon or belonging to an appid.
-        GET /v2/apps/{appId}/tasks
+    List all tasks in marathon
         GET /v2/tasks
-    :param arg: if more than 2 arguments: arg[1] -> appid, else show all running tasks
     :param opts: options used to connect and print the result
-    :return : True if task and app exists, False if not
     """
-    if len(arg) >= 2:
+    try:
+        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/tasks/')
+    except requests.exceptions.ConnectionError as e:
+        print(u'Error connecting to host')
+        print(e[0][1])
+        sys.exit(2)
+
+    printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
+
+
+def listtaskid(appid, opts):
+    """
+    List all tasks of appid
+        GET /v2/apps/{appId}/tasks
+    :param appid: Application id
+    :param opts: options used to connect and print the result
+    """
+    try:
+        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + appid + '/tasks')
+    except requests.exceptions.ConnectionError as e:
+        print(u'Error connecting to host')
+        print(e[0][1])
+        sys.exit(2)
+
+    printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
+
+
+def killtasks(appid, opts):
+    """
+    kill all tasks from appid
+        DELETE /v2/apps/{appId}/tasks
+    :param appid: app id
+    :param opts: options used to connect and print the result
+    """
+    print(u'Do you really want to destroy all tasks from application ' + appid + u'? (y/N)')
+    chose = getch()
+    if chose in ['y', 'Y']:
+        f = ''
+        if opts['force']:
+                f = '?force=true'
         try:
-            resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + arg[1] + '/tasks')
-        except requests.exceptions.ConnectionError as e:
-            print(u'Error connecting to host')
-            print(e[0][1])
-            sys.exit(2)
-    else:
-        try:
-            resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/tasks/')
+            resp = requests.delete('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + appid +
+                                   '/tasks/' + f, auth=(opts['username'], opts['password']))
+
         except requests.exceptions.ConnectionError as e:
             print(u'Error connecting to host')
             print(e[0][1])
             sys.exit(2)
 
     printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
-    if 'message' in resp.json().keys():
-        return False
-    else:
-        return True
 
 
-def killtasks(arg, opts):
+def killtaskid(appid, taskid, opts):
     """
-    kill application tasks
-        DELETE /v2/apps/{appId}/tasks
+    kill taskid of appid
         DELETE /v2/apps/{appId}/tasks/{taskId}
-    :param arg: if more than 3 arguments: arg[1] -> appid, arg[2]-> taskid. Else kill all tasks from arg[1]
+    :param appid: application Id
+    :param taskid: Task Id
     :param opts: options used to connect and print the result
     """
-    call = ''
-    if len(arg) >= 3:
-        # If more than 3 elements in arg, then the order is to kill a taskid from an appid
-        if listtasks(arg, opts):
-            print(u'Do you really want to destroy task ' + arg[2] + u' from application ' + arg[1] + u'? (y/N)')
-            chose = getch()
-            if chose in ['y', 'Y']:
-                f = ''
-                if opts['force']:
-                        f = '?force=true'
-
-                call = 'http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + arg[1] + '/tasks/' + arg[2] + f
-            else:
-                sys.exit(0)
+    print(u'Do you really want to destroy task ' + taskid + u' from application ' + appid + u'? (y/N)')
+    chose = getch()
+    if chose in ['y', 'Y']:
+        f = ''
+        if opts['force']:
+                f = '?force=true'
+        try:
+            resp = requests.delete('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + appid +
+                                   '/tasks/' + taskid + f, auth=(opts['username'], opts['password']))
+        except requests.exceptions.ConnectionError as e:
+            print(u'Error connecting to host')
+            print(e[0][1])
+            sys.exit(2)
     else:
-        # If not, the order is to kill all tasks from appid
-        if listtasks(arg, opts):
-            print(u'Do you really want to destroy all tasks from application ' + arg[1] + u'? (y/N)')
-            chose = getch()
-            if chose in ['y', 'Y']:
-                f = ''
-                if opts['force']:
-                        f = '?force=true'
-                call = 'http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + arg[1] + '/tasks/' + f
-            else:
-                sys.exit(0)
-    try:
-        resp = requests.delete(call, auth=(opts['username'], opts['password']))
-    except requests.exceptions.ConnectionError as e:
-        print(u'Error connecting to host')
-        print(e[0][1])
-        sys.exit(2)
+        sys.exit(0)
+
     printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
 
 
@@ -523,31 +551,37 @@ def listqueue(opts):
         printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
 
 
-def listgroups(arg, opts):
+def listgroups(opts):
     """
-    Get all groups config or just one from its groupid depending the arg variable
+    Get config of all groups
         GET /v2/groups
+    :param opts: options used to connect and print the result
+    """
+    try:
+        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/groups/',
+                            auth=(opts['username'], opts['password']))
+    except requests.exceptions.ConnectionError as e:
+        print(u'Error connecting to host')
+        print(e[0][1])
+        sys.exit(2)
+    printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
+
+
+def listgroupid(groupid, opts):
+    """
+    lists groupid config
         GET /v2/groups/{groupId}
-    :param arg: if more than 2 arguments: arg[1] -> appid, else show all running tasks
+    :param groupid: groupid to show config
     :param opts: options used to connect and print the result
     :return: True if groupid exists. False if not
     """
-    if len(arg) >= 2:
-        try:
-            resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/groups/' + arg[1],
-                                auth=(opts['username'], opts['password']))
-        except requests.exceptions.ConnectionError as e:
-            print(u'Error connecting to host')
-            print(e[0][1])
-            sys.exit(2)
-    else:
-        try:
-            resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/groups/',
-                                auth=(opts['username'], opts['password']))
-        except requests.exceptions.ConnectionError as e:
-            print(u'Error connecting to host')
-            print(e[0][1])
-            sys.exit(2)
+    try:
+        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/groups/' + groupid,
+                            auth=(opts['username'], opts['password']))
+    except requests.exceptions.ConnectionError as e:
+        print(u'Error connecting to host')
+        print(e[0][1])
+        sys.exit(2)
     printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
     if 'message' in resp.json().keys():
         return False
@@ -580,19 +614,20 @@ def creategroup(filename, opts):
     printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
 
 
-def updategroup(arg, opts):
+def updategroup(groupid, filename, opts):
     """
     Changes configuration of a group from a json file
         PUT /v2/groups/{groupId}
-    :param arg: arg[1] -> groupid , arg[2] -> filename
+    :param groupid: group id
+    :param filename: JSON filename
     :param opts: options used to connect and print the result
     """
     try:
-        content = open(arg[2], 'rb').read()
+        content = open(filename, 'rb').read()
         f = ''
         if opts['force']:
             f = '?force=true'
-        resp = requests.put('http://' + opts['host'] + ':' + opts['port'] + '/v2/groups/' + arg[1] + f, data=content,
+        resp = requests.put('http://' + opts['host'] + ':' + opts['port'] + '/v2/groups/' + groupid + f, data=content,
                             auth=(opts['username'], opts['password']))
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
@@ -600,10 +635,10 @@ def updategroup(arg, opts):
         sys.exit(2)
     except IOError as e:
         if e.errno == 2:
-            print(u'file name ' + arg[2] + u' not found')
+            print(u'file name ' + filename + u' not found')
             sys.exit(2)
         if e.errno == 13:
-            print(u'No read permission in file ' + arg[2])
+            print(u'No read permission in file ' + filename)
             sys.exit(2)
     except IndexError:
         print(u'Error calling group update\nSyntax: pmcli group update [groupid] [json file]')
@@ -612,22 +647,22 @@ def updategroup(arg, opts):
     printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
 
 
-def destroygroup(arg, opts):
+def destroygroup(groupid, opts):
     """
     Removes a group
         DELETE /v2/groups/{groupId}
-    :param arg: groupid to delete
+    :param groupid: groupid to delete
     :param opts: options used to connect and print the result
     """
-    if listgroups(arg, opts):
-        print(u'Do you really want to destroy ' + arg[1] + u' group? (y/N)')
+    if listgroupid(groupid, opts):
+        print(u'Do you really want to destroy ' + groupid + u' group? (y/N)')
         chose = getch()
         if chose in ['y', 'Y']:
             f = ''
             if opts['force']:
                     f = '?force=true'
             try:
-                resp = requests.delete('http://' + opts['host'] + ':' + opts['port'] + '/v2/groups/' + arg[1] + f,
+                resp = requests.delete('http://' + opts['host'] + ':' + opts['port'] + '/v2/groups/' + groupid + f,
                                        auth=(opts['username'], opts['password']))
             except requests.exceptions.ConnectionError as e:
                 print(u'Error connecting to host')
@@ -760,41 +795,41 @@ def getmetrics(opts):
 # Usage parts
 app = u"""
     ├─ app
-    │    └─┬─ list                          - list all apps
-    │      ├─ versions [appid]              - list all versions of apps of appid
-    │      ├─ show [appid]                  - show config and status of app of appid (latest version)
-    │      ├─ show [appid] [version]        - show config and status of app of appid and version
-    │      ├─ create [jsonfile]             - deploy application defined in jsonfile
-    │      ├─ update [appid] [jsonfile]     - update application appid as defined in jsonfile
-    │      ├─ change [opt] [appid] [value]  - change appid option 'opt' to 'value'
-    │      ├─ scale [appid] [N]             - Scale application appid to have N instances
-    │      ├─ restart [appid]               - restart app of appid
-    │      └─ destroy [appid]               - destroy and remove all instances of appid
+    │    └─┬─ list                            - list all apps
+    │      ├─ versions [appid]                - list all versions of \'appid\'
+    │      ├─ show [appid]                    - show config and status of \'appid\' (latest version)
+    │      ├─ showversion [appid] [versionid] - show config and status of \'appid\' and \'versionid\'
+    │      ├─ create [jsonfile]               - deploy application defined in jsonfile
+    │      ├─ update [appid] [jsonfile]       - update application \'appid\' as defined in jsonfile
+    │      ├─ change [opt] [appid] [value]    - change appid option \'opt\' to \'value\'
+    │      ├─ scale [appid] [N]               - Scale application \'appid\' to have N instances
+    │      ├─ restart [appid]                 - restart app of \'appid\'
+    │      └─ destroy [appid]                 - destroy and remove all instances of \'appid\'
     │"""
 
 task = u"""
     ├─ task
     │     └─┬─ list                       - list all tasks
-    │       ├─ list [appid]               - list tasks of app of appid
-    │       ├─ kill [appid]               - kill all tasks of app appid
-    │       ├─ killtask [appid] [taskid]  - kill task taskid of app appid
+    │       ├─ show [appid]               - list tasks of app of \'appid\'
+    │       ├─ kill [appid]               - kill all tasks of \'appid\'
+    │       ├─ killtask [appid] [taskid]  - kill task \'taskid\' of app \'appid\'
     │       └─ queue                      - list all queued tasks"""
 
 group = u"""
     │
     ├─ group
     │      └─┬─ list                        - list all groups
-    │        ├─ list [groupid]              - list groups in groupid
+    │        ├─ show [groupid]              - list groups in \'groupid\'
     │        ├─ create [jsonfile]           - create a group defined in jsonfile
-    │        ├─ update [groupid] [jsonfile] - update group groupid as defined in jsonfile
-    │        └─ destroy [groupid]           - destroy group of groupid"""
+    │        ├─ update [groupid] [jsonfile] - update \'groupid\' as defined in jsonfile
+    │        └─ destroy [groupid]           - destroy group of \'groupid\'"""
 
 
 deploy = u"""
     │
     ├─ deploy
     │       └─┬─ list                - list all active deploys
-    │         └─ destroy [deployid]  - cancel deployment of [deployid]"""
+    │         └─ destroy [deployid]  - cancel deployment of \'deployid\'"""
 
 marathon = u"""
     │
@@ -817,7 +852,7 @@ flags = u"""
        human  (simplified columns)
        json   (json on one line)
        jsonpp (json pretty printed, default)
-       raw    (the exact response from Marathon)
+       raw    (unprocessed reply from Marathon)
   -F Force operation"""
 
 usage = [app, task, group, deploy, marathon, flags]
@@ -840,8 +875,10 @@ if 'app' in sys.argv:
         sys.exit(2)
 
     if argum[0].lower() == 'list':
+        checkargs(argum, 0, 0)
         listapps(options)
     elif argum[0].lower() == 'versions':
+        checkargs(argum, 1, 0)
         try:
             listappversions(argum[1], options)
         except IndexError:
@@ -849,8 +886,23 @@ if 'app' in sys.argv:
             printpart(usage[0], 6)
             sys.exit(2)
     elif argum[0].lower() == 'show':
-            listappid(argum, options)
+        checkargs(argum, 1, 0)
+        try:
+            listappid(argum[1], options)
+        except IndexError:
+            print(u'You must supply an application index')
+            printpart(usage[0], 6)
+            sys.exit(2)
+    elif argum[0].lower() == 'showversion':
+        checkargs(argum, 2, 0)
+        try:
+            showversion(argum[1], argum[2], options)
+        except IndexError:
+            print(u'You must supply an application index')
+            printpart(usage[0], 6)
+            sys.exit(2)
     elif argum[0].lower() == 'create':
+        checkargs(argum, 1, 0)
         try:
             createapp(argum[1], options)
         except IndexError:
@@ -858,6 +910,7 @@ if 'app' in sys.argv:
             printpart(usage[0], 6)
             sys.exit(2)
     elif argum[0].lower() == 'update':
+        checkargs(argum, 2, 0)
         try:
             updateappid(argum, options)
         except IndexError:
@@ -865,6 +918,7 @@ if 'app' in sys.argv:
             printpart(usage[0], 6)
             sys.exit(2)
     elif argum[0].lower() == 'change':
+        checkargs(argum, 3, 0)
         try:
             changeoption(argum, options)
         except IndexError:
@@ -872,6 +926,7 @@ if 'app' in sys.argv:
             printpart(usage[0], 6)
             sys.exit(2)
     elif argum[0].lower() == 'scale':
+        checkargs(argum, 2, 0)
         try:
             scaleapp(argum, options)
         except IndexError:
@@ -879,6 +934,7 @@ if 'app' in sys.argv:
             printpart(usage[0], 6)
             sys.exit(2)
     elif argum[0].lower() == 'restart':
+        checkargs(argum, 1, 0)
         try:
             restartapp(argum[1], options)
         except IndexError:
@@ -886,14 +942,15 @@ if 'app' in sys.argv:
             printpart(usage[0], 6)
             sys.exit(2)
     elif argum[0].lower() == 'destroy':
+        checkargs(argum, 1, 0)
         try:
-            destroyapp(argum, options)
+            destroyapp(argum[1], options)
         except IndexError:
             print(u'You must supply an application index')
             printpart(usage[0], 6)
             sys.exit(2)
     else:
-        print(u'No proper argument to \'app\' section detected')
+        print(u'Unknown command \'' + argum[0].lower() + u'\'')
         printpart(usage[0], 6)
         sys.exit(2)
 
@@ -906,13 +963,37 @@ elif 'task' in sys.argv:
         sys.exit(2)
 
     if argum[0].lower() == 'list':
-        listtasks(argum, options)
+        checkargs(argum, 0, 1)
+        listtasks(options)
+    elif argum[0].lower() == 'show':
+        checkargs(argum, 1, 1)
+        try:
+            listtaskid(argum[1], options)
+        except IndexError:
+            print(u'Not enough number of arguments calling \'task show\'')
+            printpart(usage[1], 6)
+            sys.exit(2)
     elif argum[0].lower() == 'kill':
-        killtasks(argum, options)
+        checkargs(argum, 1, 1)
+        try:
+            killtasks(argum[1], options)
+        except IndexError:
+            print(u'Syntax error')
+            printpart(usage[1], 6)
+            sys.exit(2)
+    elif argum[0].lower() == 'killtask':
+        checkargs(argum, 2, 1)
+        try:
+            killtaskid(argum[1], argum[2], options)
+        except IndexError:
+            print(u'Syntax error')
+            printpart(usage[1], 6)
+            sys.exit(2)
     elif argum[0].lower() == 'queue':
+        checkargs(argum, 0, 1)
         listqueue(options)
     else:
-        print(u'No proper argument to \'task\' section detected')
+        print(u'Unknown command \'' + argum[0].lower() + u'\'')
         printpart(usage[1], 6)
         sys.exit(2)
 
@@ -925,15 +1006,37 @@ elif 'group' in sys.argv:
         sys.exit(2)
 
     if argum[0].lower() == 'list':
-        listgroups(argum, options)
+        checkargs(argum, 0, 2)
+        listgroups(options)
+    elif argum[0].lower() == 'show':
+        checkargs(argum, 1, 2)
+        try:
+            listgroupid(argum[1], options)
+        except IndexError:
+            print(u'Syntax error')
+            printpart(usage[2], 6)
+            sys.exit(2)
     elif argum[0].lower() == 'create':
+        checkargs(argum, 1, 2)
         creategroup(argum[1], options)
     elif argum[0].lower() == 'update':
-        updategroup(argum, options)
+        checkargs(argum, 2, 2)
+        try:
+            updategroup(argum[1], argum[2], options)
+        except IndexError:
+            print(u'Syntax error')
+            printpart(usage[2], 6)
+            sys.exit(2)
     elif argum[0].lower() == 'destroy':
-        destroygroup(argum, options)
+        checkargs(argum, 1, 2)
+        try:
+            destroygroup(argum[1], options)
+        except IndexError:
+            print(u'You must supply a groupid')
+            printpart(usage[2], 6)
+            sys.exit(2)
     else:
-        print(u'No proper argument to \'group\' section detected')
+        print(u'Unknown command \'' + argum[0].lower() + u'\'')
         printpart(usage[2], 6)
         sys.exit(2)
 
@@ -946,8 +1049,10 @@ elif 'deploy' in sys.argv:
         sys.exit(2)
 
     if argum[0].lower() == 'list':
+        checkargs(argum, 0, 3)
         listdeploys(options)
     elif argum[0].lower() == 'destroy':
+        checkargs(argum, 1, 3)
         try:
             destroydeployment(argum[1], options)
         except IndexError:
@@ -955,7 +1060,7 @@ elif 'deploy' in sys.argv:
             printpart(usage[3], 6)
             sys.exit(2)
     else:
-        print(u'No proper argument to \'deploy\' section detected')
+        print(u'Unknown command \'' + argum[0].lower() + u'\'')
         printpart(usage[3], 6)
         sys.exit(2)
 
@@ -968,17 +1073,22 @@ elif 'marathon' in sys.argv:
         sys.exit(2)
 
     if argum[0].lower() == 'leader':
+        checkargs(argum, 0, 4)
         getcurrentleader(options)
     elif argum[0].lower() == 'abdicate':
+        checkargs(argum, 0, 4)
         forcerelinquish(options)
     elif argum[0].lower() == 'ping':
+        checkargs(argum, 0, 4)
         pingmaster(options)
     elif argum[0].lower() == 'info':
+        checkargs(argum, 0, 4)
         getinfo(options)
     elif argum[0].lower() == 'metrics':
+        checkargs(argum, 0, 4)
         getmetrics(options)
     else:
-        print(u'No proper argument to \'marathon\' section detected')
+        print(u'Unknown command \'' + argum[0].lower() + u'\'')
         printpart(usage[4], 6)
         sys.exit(2)
 else:
