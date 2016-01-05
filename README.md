@@ -14,6 +14,8 @@ Needs a python interpreter (tested in 2.x) and this modules:
 - io
 - json
 
+Just copy 'pmcli' file under your system's path
+
 ## Configuration
 
 You can supply a configuration file from the CLI or use the default one under ~./.pmcli.cfg. The format is:
