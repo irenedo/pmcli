@@ -6,15 +6,11 @@ Multi-platform Marathon CLI written in python.
 
 Needs a python interpreter (tested in 2.x) and this modules:
 
-- sys
-- os
-- termios
 - ConfigParser
 - requests
-- io
 - json
 
-Just copy 'pmcli' file under your system's path
+Just copy 'pmcli' file under any of your system's paths
 
 ## Configuration
 
@@ -33,7 +29,7 @@ format can be:
 * human  (simplified columns)
 * json   (json on one line)
 * jsonpp (json pretty printed, default)
-* raw    (the exact response from Marathon)
+* raw    (the same response from Marathon, without post-parsing)
 
 You can have different marathon hosts (profiles) in the file and specify the one to use from the CLI with the '-p' switch
 
