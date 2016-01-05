@@ -203,7 +203,7 @@ def printoutput(result, outputformat, tofile, ofile):
         sys.exit(2)
 
     if tofile:
-        ch = ''
+        ch = 'y'
         if os.path.isfile(ofile):
             print(u'Output file exists. Do you really want to overwrite it? (y/N)')
             ch = getch()
@@ -415,35 +415,59 @@ def updateappid(arg, opts):
     printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
 
 
-# Still don't work
-def changeoption(arg, opts):
+def changeoption(appid, option, value, opts):
+    """
+    change option 'option' with the value 'value' in the application 'appid'
+        PUT /v2/apps/{appId}
+    :param appid: application id
+    :param option: option to change
+    :param value: new value
+    :param opts: options used to connect and print the result
+    """
     f = ''
     if opts['force']:
             f = '?force=true'
 
     try:
-        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + arg[2] + f,
+        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + appid + f,
                             auth=(opts['username'], opts['password']))
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
         sys.exit(2)
-    buff = resp.json()
-    buff['app']['cpus'] = float(arg[3])
+
+    buff = resp.json()['app']
+
+    # remove options not allowed to be changed
+    del buff['version']
+    del buff['tasks']
+    del buff['versionInfo']
+    del buff['cmd']
+
+    # Check if 'option' exists within the list of application options
+    if option not in buff.keys():
+        print(u'Unknown option \"' + option + u'\". Accepted values:\n')
+        for k in buff.keys():
+            print(u'\t\"' + k + u'\"')
+        sys.exit(2)
+
+    # try to convert value to float. If 'value' is not float, raise and exception and it's not converted
+    try:
+        v = float(value)
+    except ValueError:
+        v = value
+
+    buff[option] = v
+
     try:
         headers = {'content-type': 'application/json'}
-        resp = requests.put('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + arg[2],
-                            data=buff, headers=headers)
+        resp = requests.put('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + appid + f,
+                            data=json.dumps(buff), headers=headers)
     except requests.exceptions.ConnectionError as e:
         print(u'Error connecting to host')
         print(e[0][1])
         sys.exit(2)
     printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
-
-
-# Still don't work
-def scaleapp(arg, opts):
-    pass
 
 
 def listtasks(opts):
@@ -920,7 +944,7 @@ if 'app' in sys.argv:
     elif argum[0].lower() == 'change':
         checkargs(argum, 3, 0)
         try:
-            changeoption(argum, options)
+            changeoption(argum[1], argum[2], argum[3], options)
         except IndexError:
             print(u'Incorrect call to \'app change\'')
             printpart(usage[0], 6)
@@ -928,7 +952,7 @@ if 'app' in sys.argv:
     elif argum[0].lower() == 'scale':
         checkargs(argum, 2, 0)
         try:
-            scaleapp(argum, options)
+            changeoption(argum[1], 'instances', argum[2], options)
         except IndexError:
             print(u'Incorrect call to \'app scale\'')
             printpart(usage[0], 6)

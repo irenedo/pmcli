@@ -110,7 +110,6 @@ pmcli <flags...> [section] [action]
 ## TO DO
 
 - Support SSL
-- Update resources from command line
 - Events subscriptions (?)
 - Option to reset launch delay in an app
 - Events stream (?)
@@ -119,10 +118,6 @@ pmcli <flags...> [section] [action]
 - Test it in other platform different than linux
 
 I'm opened to any suggestion
-
-## Known bugs
-
-Still doesn't work "pmcli app change" and "pmcli app scale". This is my first priority in the developement
 
 ## Personal web page
 
