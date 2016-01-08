@@ -28,26 +28,26 @@ def checkargs(call, number, section):
         sys.exit(2)
 
 
-def printpart(text, ident):
+def printpart(text, indent):
     """
     Prints pmcli usage
     :param text: text to show
-    :param ident: Indentation
+    :param indent: Indentation
     :return: text without the first 'ident' characters from every line
     """
     res = u''
     for line in text.split('\n'):
-        res = res + line[ident:] + '\n'
+        res = res + line[indent:] + '\n'
     print(res[1:-1])
 
 
-def printusage(usage):
+def printusage(part):
     """
     Prints all pmcli usage
-    :param usage: dictinary with all pmcli parts
+    :param part: dictionary with all pmcli parts
     """
     print(u"""\npmcli <flags...> [section] [action]""")
-    for section in usage:
+    for section in part:
         printpart(section, 0)
 
 
@@ -79,8 +79,7 @@ def printhuman(dictionary, ident='', braces=1):
     if isinstance(dictionary, list):
         i = 0
         for item in dictionary:
-            templist = []
-            templist.append(item)
+            templist = [item]
             tempdict[item['id']] = templist
             i += 1
 
@@ -202,6 +201,10 @@ def printoutput(result, outputformat, tofile, ofile):
         print(u'Authorization required or wrong username/password')
         sys.exit(2)
 
+    if result.status_code == 503:
+        print(u'Problem accessing to marathon\n' + result.text)
+        sys.exit(2)
+
     if tofile:
         ch = 'y'
         if os.path.isfile(ofile):
@@ -317,6 +320,7 @@ def createapp(filename, opts):
     :param filename: filename with the app description
     :param opts: options used to connect and print the result
     """
+    resp = ''
     try:
         content = open(filename, 'rb').read()
         resp = requests.post('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/', data=content)
@@ -392,6 +396,7 @@ def updateappid(arg, opts):
     :param arg: arg[1] -> appid , arg[2] -> json file
     :param opts: options used to connect and print the result
     """
+    resp = ''
     f = ''
     if opts['force']:
             f = '?force=true'
@@ -443,6 +448,7 @@ def changeoption(appid, option, value, opts):
     del buff['tasks']
     del buff['versionInfo']
     del buff['cmd']
+    del buff['id']
 
     # Check if 'option' exists within the list of application options
     if option not in buff.keys():
@@ -457,8 +463,14 @@ def changeoption(appid, option, value, opts):
     except ValueError:
         v = value
 
-    buff[option] = v
+    # Confirm change
+    print(u'Option: \"' + option + u'\"\nOld value: ' + str(buff[option]) + u'\nNew Value :' + value +
+          u'\nDo you really want to change it? (y/N)')
+    chose = getch()
+    if chose not in ['y', 'Y']:
+        sys.exit(0)
 
+    buff[option] = v
     try:
         headers = {'content-type': 'application/json'}
         resp = requests.put('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + appid + f,
@@ -510,6 +522,7 @@ def killtasks(appid, opts):
     :param appid: app id
     :param opts: options used to connect and print the result
     """
+    resp = ''
     print(u'Do you really want to destroy all tasks from application ' + appid + u'? (y/N)')
     chose = getch()
     if chose in ['y', 'Y']:
@@ -620,6 +633,7 @@ def creategroup(filename, opts):
     :param filename: file with the group's description
     :param opts: options used to connect and print the result
     """
+    resp = ''
     try:
         content = open(filename, 'rb').read()
         resp = requests.post('http://' + opts['host'] + ':' + opts['port'] + '/v2/groups/', data=content,
@@ -646,6 +660,7 @@ def updategroup(groupid, filename, opts):
     :param filename: JSON filename
     :param opts: options used to connect and print the result
     """
+    resp = ''
     try:
         content = open(filename, 'rb').read()
         f = ''
@@ -783,6 +798,29 @@ def pingmaster(opts):
     print(resp.text)
 
 
+def attachstream(opts):
+    """
+    Pings marathon to test if it's alive
+    :param opts: options used to connect
+    """
+    try:
+        headers = {'Accept': 'text/event-stream'}
+        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/events',
+                            auth=(opts['username'], opts['password']), headers=headers, stream=True)
+        try:
+            for line in resp.iter_lines(chunk_size=128):
+                if line:
+                    print line
+        except KeyboardInterrupt:
+            resp.close()
+            sys.exit(0)
+    except requests.exceptions.ConnectionError as e:
+        print(u'Error connecting to host')
+        print(e[0][1])
+        sys.exit(2)
+    print(resp.text)
+
+
 def getinfo(opts):
     """
     Gets info about marathon instances
@@ -861,6 +899,7 @@ marathon = u"""
               └─┬─ leader    - get the current Marathon leader
                 ├─ abdicate  - force the current leader to relinquish control
                 ├─ ping      - ping Marathon master host[s]
+                ├─ events    - Attach to the events stream (exit with [Ctrl + C])
                 ├─ info      - get info about marathon instance
                 └─ metrics   - get marathon metrics"""
 
@@ -1105,6 +1144,9 @@ elif 'marathon' in sys.argv:
     elif argum[0].lower() == 'ping':
         checkargs(argum, 0, 4)
         pingmaster(options)
+    elif argum[0].lower() == 'events':
+        checkargs(argum, 0, 4)
+        attachstream(options)
     elif argum[0].lower() == 'info':
         checkargs(argum, 0, 4)
         getinfo(options)

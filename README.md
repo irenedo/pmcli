@@ -87,6 +87,7 @@ pmcli <flags...> [section] [action]
               └─┬─ leader    - get the current Marathon leader
                 ├─ abdicate  - force the current leader to relinquish control
                 ├─ ping      - ping Marathon master host[s]
+                ├─ events    - Attach to the events stream (exit with [Ctrl + C])
                 ├─ info      - get info about marathon instance
                 └─ metrics   - get marathon metrics
  Flags
@@ -110,10 +111,10 @@ pmcli <flags...> [section] [action]
 - Support SSL
 - Events subscriptions (?)
 - Option to reset launch delay in an app
-- Events stream (?)
 - Share it from a docker container
 - Test it with python 3.x
 - Test it in other platform different than linux
+- Native proxy support
 
 I'm opened to any suggestion
 
