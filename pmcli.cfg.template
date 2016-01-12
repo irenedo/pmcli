@@ -1,6 +1,29 @@
 [default]
-host = mesosmaster
-port = 8080
-user = testuser
-password = testpassword
-format = jsonpp
+
+# Marathon server DNS name or IP
+host = [marathon Address]
+
+# Marathon port
+port = [Port]
+
+# Marathon username (in case of authentication)
+user = [Username]
+
+# Maraton password (in case of authentication)
+password = [Password]
+
+# Output format
+#	human  (simplified columns)
+#	json   (json on one line)
+#	jsonpp (json pretty printed, default)
+#	raw    (unprocessed reply from Marathon)
+format = [Output Format]
+
+# HTTP proxy addres. Format http://<name>:<port>
+proxy = [Proxy Address]
+
+# HTTPS proxy addres. Format https://<name>:<port>
+proxys = [SSL Proxy Address]
+
+# Timeout for API connections, in seconds
+timeout = [Timeout]

@@ -115,7 +115,7 @@ def getconfig(arguments, outputtext):
     :param outputtext: usage text to print output
     """
     opts = {'host': ' ', 'username': '', 'password': '', 'outputformat': 'human', 'file': False,
-            'outputfile': '', 'port': '8080', 'force': False}
+            'outputfile': '', 'port': '8080', 'force': False, 'proxy': '', 'proxys': '', 'timeout': 60}
     configfile = os.path.expanduser("~/.pmcli.cfg")
     if '-c' in arguments:
         index = arguments.index('-c')
@@ -145,6 +145,9 @@ def getconfig(arguments, outputtext):
         opts['password'] = cfg.get(mesosprofile, 'password')
         opts['outputformat'] = cfg.get(mesosprofile, 'format')
         opts['port'] = cfg.get(mesosprofile, 'port')
+        opts['proxy'] = cfg.get(mesosprofile, 'proxy')
+        opts['proxys'] = cfg.get(mesosprofile, 'proxys')
+        opts['timeout'] = cfg.get(mesosprofile, 'timeout')
     except ConfigParser.NoOptionError as e:
         print(u'Syntax error en configfile-> ' + str(e))
         sys.exit(2)
@@ -183,10 +186,48 @@ def getconfig(arguments, outputtext):
         index = arguments.index('-P')
         opts['port'] = arguments[index+1]
 
+    if '-t' in arguments:
+        index = arguments.index('-t')
+        opts['timeout'] = arguments[index+1]
+
+    if '-x' in arguments:
+        index = arguments.index('-x')
+        opts['proxy'] = arguments[index+1]
+
+    if '-X' in arguments:
+        index = arguments.index('-X')
+        opts['proxys'] = arguments[index+1]
+
     if '-F' in arguments:
         opts['force'] = True
 
     return opts
+
+
+def parsetext(jsonstring, rawstring, o):
+    """
+    prints the result json or raw text to the display
+    :param jsonstring: string in json format
+    :param rawstring: string in raw format
+    :param o: option chosen to parse the result
+    :return:
+    """
+    if o == 'json':
+        try:
+            print(jsonstring)
+        except ValueError:
+            print(u'Unknown error parsing result')
+            sys.exit(2)
+    elif o == 'jsonpp':
+        try:
+            print(json.dumps(jsonstring, indent=2))
+        except ValueError:
+            print(u'Unknown error parsing result')
+            sys.exit(2)
+    elif o == 'human':
+            printhuman(jsonstring)
+    elif o == 'raw':
+        print(rawstring)
 
 
 def printoutput(result, outputformat, tofile, ofile):
@@ -220,22 +261,16 @@ def printoutput(result, outputformat, tofile, ofile):
             print(u'Can\'t write output file: ' + e[1])
             sys.exit(2)
     else:
-        if outputformat == 'json':
-            try:
-                print(result.json())
-            except ValueError:
-                print(u'Unknown error parsing result')
-                sys.exit(2)
-        elif outputformat == 'jsonpp':
-            try:
-                print(json.dumps(result.json(), indent=2))
-            except ValueError:
-                print(u'Unknown error parsing result')
-                sys.exit(2)
-        elif outputformat == 'human':
-                printhuman(result.json())
-        elif outputformat == 'raw':
-            print(result.text)
+        parsetext(result.json(), result.text, outputformat)
+
+
+def printerror(error):
+    print(u'Error connecting to host')
+    try:
+        print(error[0][1])
+    except IndexError:
+        print(error)
+    sys.exit(2)
 
 
 def listapps(opts):
@@ -244,13 +279,15 @@ def listapps(opts):
         GET /v2/apps
     :param opts: options used to connect and print the result
     """
+    resp = ''
     try:
         resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/',
-                            auth=(opts['username'], opts['password']))
+                            auth=(opts['username'], opts['password']),
+                            proxies={"http": opts['proxy'], "https": opts['proxys'], },
+                            timeout=float(opts['timeout']))
+
     except requests.exceptions.ConnectionError as e:
-        print(u'Error connecting to host')
-        print(e[0][1])
-        sys.exit(2)
+        printerror(e)
     printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
 
 
@@ -262,13 +299,14 @@ def listappid(appid, opts):
     :param opts: options used to connect and print the result
     :return: True if appid exists, False if not
     """
+    resp = ''
     try:
         resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + appid,
-                            auth=(opts['username'], opts['password']))
+                            auth=(opts['username'], opts['password']),
+                            proxies={"http": opts['proxy'], "https": opts['proxys'], },
+                            timeout=float(opts['timeout']))
     except requests.exceptions.ConnectionError as e:
-        print(u'Error connecting to host')
-        print(e[0][1])
-        sys.exit(2)
+        printerror(e)
 
     printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
     # If exists 'message' key in the returned dictionary is that the app doesn't exists
@@ -286,13 +324,16 @@ def showversion(appid, versionid, opts):
     :param versionid: version Id
     :param opts: options used to connect and print the result
     """
+    resp = ''
     try:
         resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + appid +
-                            '/versions/' + versionid, auth=(opts['username'], opts['password']))
+                            '/versions/' + versionid,
+                            auth=(opts['username'], opts['password']),
+                            proxies={"http": opts['proxy'], "https": opts['proxys'], },
+                            timeout=float(opts['timeout']))
     except requests.exceptions.ConnectionError as e:
-        print(u'Error connecting to host')
-        print(e[0][1])
-        sys.exit(2)
+        printerror(e)
+
     printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
 
 
@@ -303,13 +344,14 @@ def listappversions(appid, opts):
     :param appid: appid
     :param opts: options used to connect and print the result
     """
+    resp = ''
     try:
         resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + appid + '/versions',
-                            auth=(opts['username'], opts['password']))
+                            auth=(opts['username'], opts['password']),
+                            proxies={"http": opts['proxy'], "https": opts['proxys'], },
+                            timeout=float(opts['timeout']))
     except requests.exceptions.ConnectionError as e:
-        print(u'Error connecting to host')
-        print(e[0][1])
-        sys.exit(2)
+        printerror(e)
     printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
 
 
@@ -323,11 +365,12 @@ def createapp(filename, opts):
     resp = ''
     try:
         content = open(filename, 'rb').read()
-        resp = requests.post('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/', data=content)
+        resp = requests.post('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/',
+                             data=content,
+                             proxies={"http": opts['proxy'], "https": opts['proxys'], },
+                             timeout=float(opts['timeout']))
     except requests.exceptions.ConnectionError as e:
-        print(u'Error connecting to host')
-        print(e[0][1])
-        sys.exit(2)
+        printerror(e)
     except IOError as e:
         if e.errno == 2:
             print(u'file name ' + filename + u' not found')
@@ -346,6 +389,7 @@ def destroyapp(appid, opts):
     :param opts: options used to connect and print the result
     :return:
     """
+    resp = ''
     if listappid(appid, opts):
         print(u'Do you really want to destroy ' + appid + u' application? (y/N)')
         chose = getch()
@@ -356,11 +400,11 @@ def destroyapp(appid, opts):
 
             try:
                 resp = requests.delete('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + appid + f,
-                                       auth=(opts['username'], opts['password']))
+                                       auth=(opts['username'], opts['password']),
+                                       proxies={"http": opts['proxy'], "https": opts['proxys'], },
+                                       timeout=float(opts['timeout']))
             except requests.exceptions.ConnectionError as e:
-                print(u'Error connecting to host')
-                print(e[0][1])
-                sys.exit(2)
+                printerror(e)
             printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
         else:
             sys.exit(0)
@@ -375,17 +419,18 @@ def restartapp(appid, opts):
     :param appid: appid to restart
     :param opts: options used to connect and print the result
     """
+    resp = ''
     f = ''
     if opts['force']:
         f = '?force=true'
 
     try:
         resp = requests.post('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + appid + '/restart/' + f,
-                             auth=(opts['username'], opts['password']))
+                             auth=(opts['username'], opts['password']),
+                             proxies={"http": opts['proxy'], "https": opts['proxys'], },
+                             timeout=float(opts['timeout']))
     except requests.exceptions.ConnectionError as e:
-        print(u'Error connecting to host')
-        print(e[0][1])
-        sys.exit(2)
+        printerror(e)
     printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
 
 
@@ -404,11 +449,11 @@ def updateappid(arg, opts):
     try:
         content = open(arg[2], 'rb').read()
         resp = requests.put('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + arg[1] + f, data=content,
-                            auth=(opts['username'], opts['password']))
+                            auth=(opts['username'], opts['password']),
+                            proxies={"http": opts['proxy'], "https": opts['proxys'], },
+                            timeout=float(opts['timeout']))
     except requests.exceptions.ConnectionError as e:
-        print(u'Error connecting to host')
-        print(e[0][1])
-        sys.exit(2)
+        printerror(e)
     except IOError as e:
         if e.errno == 2:
             print(u'file name ' + arg[2] + u' not found')
@@ -429,17 +474,18 @@ def changeoption(appid, option, value, opts):
     :param value: new value
     :param opts: options used to connect and print the result
     """
+    resp = ''
     f = ''
     if opts['force']:
             f = '?force=true'
 
     try:
         resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + appid + f,
-                            auth=(opts['username'], opts['password']))
+                            auth=(opts['username'], opts['password']),
+                            proxies={"http": opts['proxy'], "https": opts['proxys'], },
+                            timeout=float(opts['timeout']))
     except requests.exceptions.ConnectionError as e:
-        print(u'Error connecting to host')
-        print(e[0][1])
-        sys.exit(2)
+        printerror(e)
 
     buff = resp.json()['app']
 
@@ -474,11 +520,13 @@ def changeoption(appid, option, value, opts):
     try:
         headers = {'content-type': 'application/json'}
         resp = requests.put('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + appid + f,
-                            data=json.dumps(buff), headers=headers)
+                            data=json.dumps(buff),
+                            auth=(opts['username'], opts['password']),
+                            headers=headers,
+                            proxies={"http": opts['proxy'], "https": opts['proxys'], },
+                            timeout=float(opts['timeout']))
     except requests.exceptions.ConnectionError as e:
-        print(u'Error connecting to host')
-        print(e[0][1])
-        sys.exit(2)
+        printerror(e)
     printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
 
 
@@ -488,12 +536,14 @@ def listtasks(opts):
         GET /v2/tasks
     :param opts: options used to connect and print the result
     """
+    resp = ''
     try:
-        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/tasks/')
+        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/tasks/',
+                            auth=(opts['username'], opts['password']),
+                            proxies={"http": opts['proxy'], "https": opts['proxys'], },
+                            timeout=float(opts['timeout']))
     except requests.exceptions.ConnectionError as e:
-        print(u'Error connecting to host')
-        print(e[0][1])
-        sys.exit(2)
+        printerror(e)
 
     printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
 
@@ -505,12 +555,14 @@ def listtaskid(appid, opts):
     :param appid: Application id
     :param opts: options used to connect and print the result
     """
+    resp = ''
     try:
-        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + appid + '/tasks')
+        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + appid + '/tasks',
+                            auth=(opts['username'], opts['password']),
+                            proxies={"http": opts['proxy'], "https": opts['proxys'], },
+                            timeout=float(opts['timeout']))
     except requests.exceptions.ConnectionError as e:
-        print(u'Error connecting to host')
-        print(e[0][1])
-        sys.exit(2)
+        printerror(e)
 
     printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
 
@@ -530,13 +582,13 @@ def killtasks(appid, opts):
         if opts['force']:
                 f = '?force=true'
         try:
-            resp = requests.delete('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + appid +
-                                   '/tasks/' + f, auth=(opts['username'], opts['password']))
+            resp = requests.delete('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + appid + '/tasks/' + f,
+                                   auth=(opts['username'], opts['password']),
+                                   proxies={"http": opts['proxy'], "https": opts['proxys'], },
+                                   timeout=float(opts['timeout']))
 
         except requests.exceptions.ConnectionError as e:
-            print(u'Error connecting to host')
-            print(e[0][1])
-            sys.exit(2)
+            printerror(e)
 
     printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
 
@@ -549,6 +601,7 @@ def killtaskid(appid, taskid, opts):
     :param taskid: Task Id
     :param opts: options used to connect and print the result
     """
+    resp = ''
     print(u'Do you really want to destroy task ' + taskid + u' from application ' + appid + u'? (y/N)')
     chose = getch()
     if chose in ['y', 'Y']:
@@ -557,11 +610,12 @@ def killtaskid(appid, taskid, opts):
                 f = '?force=true'
         try:
             resp = requests.delete('http://' + opts['host'] + ':' + opts['port'] + '/v2/apps/' + appid +
-                                   '/tasks/' + taskid + f, auth=(opts['username'], opts['password']))
+                                   '/tasks/' + taskid + f,
+                                   auth=(opts['username'], opts['password']),
+                                   proxies={"http": opts['proxy'], "https": opts['proxys'], },
+                                   timeout=float(opts['timeout']))
         except requests.exceptions.ConnectionError as e:
-            print(u'Error connecting to host')
-            print(e[0][1])
-            sys.exit(2)
+            printerror(e)
     else:
         sys.exit(0)
 
@@ -574,18 +628,36 @@ def listqueue(opts):
         GET /v2/queue
     :param opts: options used to connect and print the result
     """
+    resp = ''
     try:
         resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/queue/',
-                            auth=(opts['username'], opts['password']))
+                            auth=(opts['username'], opts['password']),
+                            proxies={"http": opts['proxy'], "https": opts['proxys'], },
+                            timeout=float(opts['timeout']))
     except requests.exceptions.ConnectionError as e:
-        print(u'Error connecting to host')
-        print(e[0][1])
-        sys.exit(2)
+        printerror(e)
 
     if not resp:
         print("No tasks queued")
     else:
         printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
+
+
+def resetdelay(appid, opts):
+    """
+    The application specific task launch delay can be reset by calling this endpoint
+        DELETE /v2/queue/{appId}/delay
+    :param appid: appid
+    :param opts: options used to connect and print the result
+    """
+
+    try:
+        requests.delete('http://' + opts['host'] + ':' + opts['port'] + '/v2/queue/' + appid + '/delay',
+                        auth=(opts['username'], opts['password']),
+                        proxies={"http": opts['proxy'], "https": opts['proxys'], },
+                        timeout=float(opts['timeout']))
+    except requests.exceptions.ConnectionError as e:
+        printerror(e)
 
 
 def listgroups(opts):
@@ -594,13 +666,14 @@ def listgroups(opts):
         GET /v2/groups
     :param opts: options used to connect and print the result
     """
+    resp = ''
     try:
         resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/groups/',
-                            auth=(opts['username'], opts['password']))
+                            auth=(opts['username'], opts['password']),
+                            proxies={"http": opts['proxy'], "https": opts['proxys'], },
+                            timeout=float(opts['timeout']))
     except requests.exceptions.ConnectionError as e:
-        print(u'Error connecting to host')
-        print(e[0][1])
-        sys.exit(2)
+        printerror(e)
     printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
 
 
@@ -612,13 +685,14 @@ def listgroupid(groupid, opts):
     :param opts: options used to connect and print the result
     :return: True if groupid exists. False if not
     """
+    resp = ''
     try:
         resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/groups/' + groupid,
-                            auth=(opts['username'], opts['password']))
+                            auth=(opts['username'], opts['password']),
+                            proxies={"http": opts['proxy'], "https": opts['proxys'], },
+                            timeout=float(opts['timeout']))
     except requests.exceptions.ConnectionError as e:
-        print(u'Error connecting to host')
-        print(e[0][1])
-        sys.exit(2)
+        printerror(e)
     printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
     if 'message' in resp.json().keys():
         return False
@@ -636,12 +710,13 @@ def creategroup(filename, opts):
     resp = ''
     try:
         content = open(filename, 'rb').read()
-        resp = requests.post('http://' + opts['host'] + ':' + opts['port'] + '/v2/groups/', data=content,
-                             auth=(opts['username'], opts['password']))
+        resp = requests.post('http://' + opts['host'] + ':' + opts['port'] + '/v2/groups/',
+                             data=content,
+                             auth=(opts['username'], opts['password']),
+                             proxies={"http": opts['proxy'], "https": opts['proxys'], },
+                             timeout=float(opts['timeout']))
     except requests.exceptions.ConnectionError as e:
-        print(u'Error connecting to host')
-        print(e[0][1])
-        sys.exit(2)
+        printerror(e)
     except IOError as e:
         if e.errno == 2:
             print(u'file name ' + filename + u' not found')
@@ -666,12 +741,13 @@ def updategroup(groupid, filename, opts):
         f = ''
         if opts['force']:
             f = '?force=true'
-        resp = requests.put('http://' + opts['host'] + ':' + opts['port'] + '/v2/groups/' + groupid + f, data=content,
-                            auth=(opts['username'], opts['password']))
+        resp = requests.put('http://' + opts['host'] + ':' + opts['port'] + '/v2/groups/' + groupid + f,
+                            data=content,
+                            auth=(opts['username'], opts['password']),
+                            proxies={"http": opts['proxy'], "https": opts['proxys'], },
+                            timeout=float(opts['timeout']))
     except requests.exceptions.ConnectionError as e:
-        print(u'Error connecting to host')
-        print(e[0][1])
-        sys.exit(2)
+        printerror(e)
     except IOError as e:
         if e.errno == 2:
             print(u'file name ' + filename + u' not found')
@@ -693,6 +769,7 @@ def destroygroup(groupid, opts):
     :param groupid: groupid to delete
     :param opts: options used to connect and print the result
     """
+    resp = ''
     if listgroupid(groupid, opts):
         print(u'Do you really want to destroy ' + groupid + u' group? (y/N)')
         chose = getch()
@@ -702,11 +779,11 @@ def destroygroup(groupid, opts):
                     f = '?force=true'
             try:
                 resp = requests.delete('http://' + opts['host'] + ':' + opts['port'] + '/v2/groups/' + groupid + f,
-                                       auth=(opts['username'], opts['password']))
+                                       auth=(opts['username'], opts['password']),
+                                       proxies={"http": opts['proxy'], "https": opts['proxys'], },
+                                       timeout=float(opts['timeout']))
             except requests.exceptions.ConnectionError as e:
-                print(u'Error connecting to host')
-                print(e[0][1])
-                sys.exit(2)
+                printerror(e)
             printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
         else:
             sys.exit(0)
@@ -720,13 +797,14 @@ def listdeploys(opts):
         GET /v2/deployments
     :param opts: options used to connect and print the result
     """
+    resp = ''
     try:
         resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/deployments/',
-                            auth=(opts['username'], opts['password']))
+                            auth=(opts['username'], opts['password']),
+                            proxies={"http": opts['proxy'], "https": opts['proxys'], },
+                            timeout=float(opts['timeout']))
     except requests.exceptions.ConnectionError as e:
-        print(u'Error connecting to host')
-        print(e[0][1])
-        sys.exit(2)
+        printerror(e)
     printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
 
 
@@ -737,16 +815,113 @@ def destroydeployment(deployid, opts):
     :param deployid: deploymentId
     :param opts: options used to connect and print the result
     """
+    resp = ''
     try:
         f = ''
         if opts['force']:
             f = '?force=true'
         resp = requests.delete('http://' + opts['host'] + ':' + opts['port'] + '/v2/deployments/' + deployid + f,
-                               auth=(opts['username'], opts['password']))
+                               auth=(opts['username'], opts['password']),
+                               proxies={"http": opts['proxy'], "https": opts['proxys'], },
+                               timeout=float(opts['timeout']))
     except requests.exceptions.ConnectionError as e:
-        print(u'Error connecting to host')
-        print(e[0][1])
+        printerror(e)
+
+    printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
+
+
+def listsubscriptions(opts):
+    """
+    List all event subscriber callback URLs.
+        GET /v2/eventSubscriptions
+    :param opts: options used to connect and print the result
+    """
+    resp = ''
+    try:
+        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/eventSubscriptions',
+                            auth=(opts['username'], opts['password']),
+                            proxies={"http": opts['proxy'], "https": opts['proxys'], },
+                            timeout=float(opts['timeout']))
+    except requests.exceptions.ConnectionError as e:
+        printerror(e)
+    printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
+
+
+def registersubscription(url, opts):
+    """
+    Register a callback URL as an event subscriber.
+        POST /v2/eventSubscriptions
+    :param url: URL to which events should be posted
+    :param opts: options used to connect and print the result
+    """
+    resp = ''
+    try:
+        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/eventSubscriptions',
+                            auth=(opts['username'], opts['password']),
+                            proxies={"http": opts['proxy'], "https": opts['proxys'], },
+                            timeout=float(opts['timeout']))
+    except requests.exceptions.ConnectionError as e:
+        printerror(e)
+
+    if url in resp.json()['callbackUrls']:
+        print(url + u' is already registered. Do you want to register it again? (y/N)')
+        chose = getch()
+        if chose not in ['y', 'Y']:
+            sys.exit(0)
+
+    f = ''
+    if opts['force']:
+            f = '?force=true'
+
+    try:
+        resp = requests.post('http://' + opts['host'] + ':' + opts['port'] +
+                             '/v2/eventSubscriptions' + '?callbackUrl=' + url + f,
+                             auth=(opts['username'], opts['password']),
+                             proxies={"http": opts['proxy'], "https": opts['proxys'], },
+                             timeout=float(opts['timeout']))
+    except requests.exceptions.ConnectionError as e:
+        printerror(e)
+    printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
+
+
+def destroysubscription(url, opts):
+    """
+    Unregister a callback URL from the event subscribers list.
+        DELETE /v2/eventSubscriptions
+    :param url: URL passed when the event subscription was created.
+    :param opts: options used to connect and print the result
+    """
+
+    resp = ''
+    try:
+        resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/eventSubscriptions',
+                            auth=(opts['username'], opts['password']),
+                            proxies={"http": opts['proxy'], "https": opts['proxys'], },
+                            timeout=float(opts['timeout']))
+    except requests.exceptions.ConnectionError as e:
+        printerror(e)
+
+    if url in resp.json()['callbackUrls']:
+        print(u'Do you really want to unregister \'' + url + u'\' ? (y/N)')
+        chose = getch()
+        if chose not in ['y', 'Y']:
+            sys.exit(0)
+    else:
+        print(u'\'' + url + u'\' is not registered')
         sys.exit(2)
+
+    resp = ''
+    try:
+        f = ''
+        if opts['force']:
+            f = '?force=true'
+        resp = requests.delete('http://' + opts['host'] + ':' + opts['port'] +
+                               '/v2/eventSubscriptions' + '?callbackUrl=' + url + f,
+                               auth=(opts['username'], opts['password']),
+                               proxies={"http": opts['proxy'], "https": opts['proxys'], },
+                               timeout=float(opts['timeout']))
+    except requests.exceptions.ConnectionError as e:
+        printerror(e)
 
     printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
 
@@ -757,13 +932,14 @@ def getcurrentleader(opts):
         GET /v2/leader
     :param opts: options used to connect and print the result
     """
+    resp = ''
     try:
         resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/leader/',
-                            auth=(opts['username'], opts['password']))
+                            auth=(opts['username'], opts['password']),
+                            proxies={"http": opts['proxy'], "https": opts['proxys'], },
+                            timeout=float(opts['timeout']))
     except requests.exceptions.ConnectionError as e:
-        print(u'Error connecting to host')
-        print(e[0][1])
-        sys.exit(2)
+        printerror(e)
     printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
 
 
@@ -773,13 +949,14 @@ def forcerelinquish(opts):
         DELETE /v2/leader
     :param opts: options used to connect and print the result
     """
+    resp = ''
     try:
         resp = requests.delete('http://' + opts['host'] + ':' + opts['port'] + '/v2/leader/',
-                               auth=(opts['username'], opts['password']))
+                               auth=(opts['username'], opts['password']),
+                               proxies={"http": opts['proxy'], "https": opts['proxys'], },
+                               timeout=float(opts['timeout']))
     except requests.exceptions.ConnectionError as e:
-        print(u'Error connecting to host')
-        print(e[0][1])
-        sys.exit(2)
+        printerror(e)
     printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
 
 
@@ -788,13 +965,14 @@ def pingmaster(opts):
     Pings marathon to test if it's alive
     :param opts: options used to connect
     """
+    resp = ''
     try:
         resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/ping',
-                            auth=(opts['username'], opts['password']))
+                            auth=(opts['username'], opts['password']),
+                            proxies={"http": opts['proxy'], "https": opts['proxys'], },
+                            timeout=float(opts['timeout']))
     except requests.exceptions.ConnectionError as e:
-        print(u'Error connecting to host')
-        print(e[0][1])
-        sys.exit(2)
+        printerror(e)
     print(resp.text)
 
 
@@ -803,21 +981,28 @@ def attachstream(opts):
     Pings marathon to test if it's alive
     :param opts: options used to connect
     """
+    resp = ''
     try:
         headers = {'Accept': 'text/event-stream'}
         resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/events',
-                            auth=(opts['username'], opts['password']), headers=headers, stream=True)
+                            auth=(opts['username'], opts['password']),
+                            headers=headers,
+                            stream=True,
+                            proxies={"http": opts['proxy'], "https": opts['proxys'], },
+                            timeout=float(opts['timeout']))
         try:
             for line in resp.iter_lines(chunk_size=128):
                 if line:
-                    print line
+                    if "data:" in line:
+                        output = line.split("data: ")[1]
+                        parsetext(json.loads(output), output, opts['outputformat'])
+                    else:
+                        print line
         except KeyboardInterrupt:
             resp.close()
             sys.exit(0)
     except requests.exceptions.ConnectionError as e:
-        print(u'Error connecting to host')
-        print(e[0][1])
-        sys.exit(2)
+        printerror(e)
     print(resp.text)
 
 
@@ -828,13 +1013,14 @@ def getinfo(opts):
     :param opts: options used to connect and print the result
     :return:
     """
+    resp = ''
     try:
         resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/v2/info/',
-                            auth=(opts['username'], opts['password']))
+                            auth=(opts['username'], opts['password']),
+                            proxies={"http": opts['proxy'], "https": opts['proxys'], },
+                            timeout=float(opts['timeout']))
     except requests.exceptions.ConnectionError as e:
-        print(u'Error connecting to host')
-        print(e[0][1])
-        sys.exit(2)
+        printerror(e)
     printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
 
 
@@ -844,13 +1030,14 @@ def getmetrics(opts):
         GET /metrics
     :param opts: options used to connect and print the result
     """
+    resp = ''
     try:
         resp = requests.get('http://' + opts['host'] + ':' + opts['port'] + '/metrics',
-                            auth=(opts['username'], opts['password']))
+                            auth=(opts['username'], opts['password']),
+                            proxies={"http": opts['proxy'], "https": opts['proxys'], },
+                            timeout=float(opts['timeout']))
     except requests.exceptions.ConnectionError as e:
-        print(u'Error connecting to host')
-        print(e[0][1])
-        sys.exit(2)
+        printerror(e)
     printoutput(resp, opts['outputformat'], opts['file'], opts['outputfile'])
 
 
@@ -866,7 +1053,9 @@ app = u"""
     │      ├─ change [opt] [appid] [value]    - change appid option \'opt\' to \'value\'
     │      ├─ scale [appid] [N]               - Scale application \'appid\' to have N instances
     │      ├─ restart [appid]                 - restart app of \'appid\'
-    │      └─ destroy [appid]                 - destroy and remove all instances of \'appid\'
+    │      ├─ destroy [appid]                 - destroy and remove all instances of \'appid\'
+    │      ├─ queue                           - (v0.7.0 and above) list all queued tasks
+    │      └─ reset [appid]                   - (v0.10.0 and above) reset \'appid\' launch delay
     │"""
 
 task = u"""
@@ -874,12 +1063,11 @@ task = u"""
     │     └─┬─ list                       - list all tasks
     │       ├─ show [appid]               - list tasks of app of \'appid\'
     │       ├─ kill [appid]               - kill all tasks of \'appid\'
-    │       ├─ killtask [appid] [taskid]  - kill task \'taskid\' of app \'appid\'
-    │       └─ queue                      - list all queued tasks"""
+    │       └─ killtask [appid] [taskid]  - kill task \'taskid\' of app \'appid\'"""
 
 group = u"""
     │
-    ├─ group
+    ├─ group (v0.7.0 and above)
     │      └─┬─ list                        - list all groups
     │        ├─ show [groupid]              - list groups in \'groupid\'
     │        ├─ create [jsonfile]           - create a group defined in jsonfile
@@ -889,18 +1077,25 @@ group = u"""
 
 deploy = u"""
     │
-    ├─ deploy
+    ├─ deploy (v0.7.0 and above)
     │       └─┬─ list                - list all active deploys
     │         └─ destroy [deployid]  - cancel deployment of \'deployid\'"""
+
+subs = u"""
+    │
+    ├─ subs (v0.9.0 and above)
+    │     └─┬─ list              - List all event subscriber callback URLs
+    │       ├─ register [url]    - Register \'url\' as an event subscriber list
+    │       └─ unregister [url]  - Unregister \'url\' from the event subscribers list"""
 
 marathon = u"""
     │
     └─ marathon
-              └─┬─ leader    - get the current Marathon leader
-                ├─ abdicate  - force the current leader to relinquish control
+              └─┬─ leader    - (v0.7.0 and above) get the current Marathon leader
+                ├─ abdicate  - (v0.7.0 and above) force the current leader to relinquish control
                 ├─ ping      - ping Marathon master host[s]
-                ├─ events    - Attach to the events stream (exit with [Ctrl + C])
-                ├─ info      - get info about marathon instance
+                ├─ events    - (v0.9.0 and above) Attach to the events stream (exit with [Ctrl + C])
+                ├─ info      - (v0.7.0 and above) get info about marathon instance
                 └─ metrics   - get marathon metrics"""
 
 flags = u"""
@@ -916,9 +1111,12 @@ flags = u"""
        json   (json on one line)
        jsonpp (json pretty printed, default)
        raw    (unprocessed reply from Marathon)
+  -t [timeout] Timeout for connections
+  -x [http proxy] proxy address
+  -X [https proxy] SSL proxy address
   -F Force operation"""
 
-usage = [app, task, group, deploy, marathon, flags]
+usage = [app, task, group, deploy, subs, marathon, flags]
 
 # MAIN
 
@@ -1012,6 +1210,18 @@ if 'app' in sys.argv:
             print(u'You must supply an application index')
             printpart(usage[0], 6)
             sys.exit(2)
+    elif argum[0].lower() == 'queue':
+        checkargs(argum, 0, 0)
+        listqueue(options)
+    elif argum[0].lower() == 'reset':
+        checkargs(argum, 1, 0)
+        try:
+            resetdelay(argum[1], options)
+        except IndexError:
+            print(u'You must supply an application id')
+            printpart(usage[0], 6)
+            sys.exit(2)
+
     else:
         print(u'Unknown command \'' + argum[0].lower() + u'\'')
         printpart(usage[0], 6)
@@ -1052,9 +1262,7 @@ elif 'task' in sys.argv:
             print(u'Syntax error')
             printpart(usage[1], 6)
             sys.exit(2)
-    elif argum[0].lower() == 'queue':
-        checkargs(argum, 0, 1)
-        listqueue(options)
+
     else:
         print(u'Unknown command \'' + argum[0].lower() + u'\'')
         printpart(usage[1], 6)
@@ -1127,6 +1335,33 @@ elif 'deploy' in sys.argv:
         printpart(usage[3], 6)
         sys.exit(2)
 
+elif 'subs' in sys.argv:
+    idx = sys.argv.index('subs')
+    argum = sys.argv[idx+1:]
+    if not argum:
+        print(u'Action \'subs\' has no arguments')
+        printpart(usage[4], 6)
+        sys.exit(2)
+
+    if argum[0].lower() == 'list':
+        checkargs(argum, 0, 4)
+        listsubscriptions(options)
+    elif argum[0].lower() == 'register':
+        checkargs(argum, 1, 4)
+        registersubscription(argum[1], options)
+    elif argum[0].lower() == 'unregister':
+        checkargs(argum, 1, 4)
+        try:
+            destroysubscription(argum[1], options)
+        except IndexError:
+            print(u'You must supply a callback URL')
+            printpart(usage[3], 6)
+            sys.exit(2)
+    else:
+        print(u'Unknown command \'' + argum[0].lower() + u'\'')
+        printpart(usage[4], 6)
+        sys.exit(2)
+
 elif 'marathon' in sys.argv:
     idx = sys.argv.index('marathon')
     argum = sys.argv[idx+1:]
@@ -1136,22 +1371,22 @@ elif 'marathon' in sys.argv:
         sys.exit(2)
 
     if argum[0].lower() == 'leader':
-        checkargs(argum, 0, 4)
+        checkargs(argum, 0, 5)
         getcurrentleader(options)
     elif argum[0].lower() == 'abdicate':
-        checkargs(argum, 0, 4)
+        checkargs(argum, 0, 5)
         forcerelinquish(options)
     elif argum[0].lower() == 'ping':
-        checkargs(argum, 0, 4)
+        checkargs(argum, 0, 5)
         pingmaster(options)
     elif argum[0].lower() == 'events':
-        checkargs(argum, 0, 4)
+        checkargs(argum, 0, 5)
         attachstream(options)
     elif argum[0].lower() == 'info':
-        checkargs(argum, 0, 4)
+        checkargs(argum, 0, 5)
         getinfo(options)
     elif argum[0].lower() == 'metrics':
-        checkargs(argum, 0, 4)
+        checkargs(argum, 0, 5)
         getmetrics(options)
     else:
         print(u'Unknown command \'' + argum[0].lower() + u'\'')
