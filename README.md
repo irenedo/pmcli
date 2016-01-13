@@ -158,7 +158,6 @@ pmcli <flags...> [section] [action]
 
 - Option to work without config file, just with command arguments
 - Option to filter output
-- Show "force" message more user friendly
 - Unicode support
 - Share it from a docker container
 - Test it with python 3.x

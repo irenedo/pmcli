@@ -10,6 +10,7 @@ import ConfigParser
 import requests
 import io
 import json
+import re
 
 __author__ = "Iván Renedo"
 __copyright__ = "GPL"
@@ -134,9 +135,12 @@ def getconfig(arguments, outputtext):
     :param arguments: arguments used to call pmcli
     :param outputtext: usage text to print output
     """
+    # dictionary with all parameters of configuration
     opts = {'host': ' ', 'username': '', 'password': '', 'outputformat': 'jsonpp', 'file': False,
             'outputfile': '', 'port': '8080', 'force': False, 'proxy': '', 'sproxy': '',
             'timeout': 60, 'ssl': False, 'verifyssl': True, 'cert': ''}
+
+    # Get config file and check if exists and is readable
     configfile = os.path.expanduser("~/.pmcli.cfg")
     if '-c' in arguments:
         index = arguments.index('-c')
@@ -145,6 +149,7 @@ def getconfig(arguments, outputtext):
     if not checkfile(configfile):
         sys.exit(2)
 
+    # get profile to use with the config file
     mesosprofile = 'default'
     if '-p' in sys.argv:
         index = sys.argv.index('-p')
@@ -152,6 +157,7 @@ def getconfig(arguments, outputtext):
     cfg = ConfigParser.ConfigParser()
     cfg.read(configfile)
 
+    # read all config from file
     try:
         opts['host'] = cfg.get(mesosprofile, 'host')
         opts['username'] = cfg.get(mesosprofile, 'user')
@@ -171,19 +177,19 @@ def getconfig(arguments, outputtext):
                     sys.exit(2)
                 else:
                     checkfile(opts['cert'])
-            else:
-                opts['cert'] = False
     except ConfigParser.NoOptionError as e:
         print(u'Syntax error en configfile-> ' + str(e))
         sys.exit(2)
     except ConfigParser.NoSectionError:
-        print(u'Profile \"' + mesosprofile.encode('utf-8') + u'\" doesn\'t exists in file ' + configfile)
+        print(u'Profile \"' + mesosprofile.encode('utf-8') + u'\" doesn\'t exist in file ' + configfile)
         sys.exit(2)
 
+    # get hostname from arguments and overrides the config file one in that case
     if '-h' in arguments:
         index = arguments.index('-h')
         opts['host'] = arguments[index+1]
 
+    # get username and password from arguments and overrides the config file ones in that case
     if '-u' in arguments:
         index = arguments.index('-u')
         userpass = arguments[index+1]
@@ -194,47 +200,99 @@ def getconfig(arguments, outputtext):
             printpart(outputtext[6], 0)
             sys.exit(2)
 
+    # get output format from arguments and overrides the config file one in that case ...
     if '-f' in arguments:
         index = arguments.index('-f')
         opts['outputformat'] = arguments[index+1]
-        if opts['outputformat'] not in ['json', 'human', 'jsonpp', 'raw']:
-            print(u'Unknown output format')
-            printpart(outputtext[6], 0)
-            sys.exit(2)
+    # ... and check if the specified input format is correct
+    if opts['outputformat'] not in ['json', 'human', 'jsonpp', 'raw']:
+        print(u'Unknown output format')
+        printpart(outputtext[6], 0)
+        sys.exit(2)
 
+    # get output file to write result
     if '-o' in arguments:
         index = arguments.index('-o')
         opts['file'] = True
         opts['outputfile'] = arguments[index+1]
 
+    # get the port number from arguments and overrides the config file one in that case ...
     if '-P' in arguments:
         index = arguments.index('-P')
         opts['port'] = arguments[index+1]
+    # ... and check is a number between 1 and 65535
+    if not 1 <= float(opts['port']) <= 65535:
+        print(u'Wrong port number')
+        printpart(outputtext[6], 0)
+        sys.exit(2)
 
+    # get the timeout from arguments and overrides the config file one in that case ...
     if '-t' in arguments:
         index = arguments.index('-t')
         opts['timeout'] = arguments[index+1]
+    # ... and check if a number between 1 and 120
+    if not 1 <= float(opts['timeout']) <= 120:
+        print(u'Wrong timeout value')
+        printpart(outputtext[6], 0)
+        sys.exit(2)
 
+    # regexp to check url format in proxy addresses
+    plainurlformat = r'^http://(?:(?:[A-Z0-9\.](?:[A-Z0-9-\.]{0,61}[A-Z0-9\.])?)|' \
+                     r'localhost|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})' \
+                     r'(?::\d+)?(?:/?|[/?]\S+)$'
+
+    # get the proxy from arguments and overrides the config file one in that case ...
     if '-x' in arguments:
         index = arguments.index('-x')
         opts['proxy'] = arguments[index+1]
+    # ... and check the format is correct: http://[name]:[port]
+    if opts['proxy']:
+        if not re.match(plainurlformat, opts['proxy'], re.IGNORECASE):
+            print(u'Wrong proxy URL syntax for HTTP proxy')
+            printpart(outputtext[6], 0)
+            sys.exit(2)
 
+    # regexp to check url format in SSL proxy addresses
+    sslurlformat = r'^https://(?:(?:[A-Z0-9\.](?:[A-Z0-9-\.]{0,61}[A-Z0-9\.])?)|' \
+                   r'localhost|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})' \
+                   r'(?::\d+)?(?:/?|[/?]\S+)$'
+    # get the https proxy from arguments and overrides the config file one in that case ...
     if '-X' in arguments:
         index = arguments.index('-X')
         opts['sproxy'] = arguments[index+1]
+    # ... and check the format is correct: https://[name]:[port]
+    if opts['sproxy']:
+        if not re.match(sslurlformat, opts['sproxy'], re.IGNORECASE):
+            print(u'Wrong proxy URL syntax for HTTPS proxy')
+            printpart(outputtext[6], 0)
+            sys.exit(2)
 
+    # Check if we must use SSL and overrides the option from file
+    if '-S' in arguments:
+        opts['ssl'] = True
+    else:
+        # Check option 'ssl' in config file
+        if opts['ssl'] == '1':
+            opts['ssl'] = True
+        elif opts['ssl'] == '0':
+            opts['ssl'] = False
+        else:
+            print(u'\'ssl\' option in config file must be 1:Enable, 0:Disabled')
+            sys.exit(2)
+
+    # get the certificate from arguments and overrides the config file one in that case ...
     if '-C' in arguments:
         index = arguments.index('-C')
         opts['cert'] = arguments[index+1]
-        if not checkfile(opts['cert']):
-            sys.exit(2)
+    # Check if file exists and is readable
+    if not checkfile(opts['cert']):
+        sys.exit(2)
 
-    if '-S' in arguments:
-        opts['ssl'] = True
-
+    # Check if we must not verify SSL and overrides the option from file
     if '-N' in arguments:
         opts['cert'] = False
 
+    # Check if we must force marathon API operations. This option can be only used from command line
     if '-F' in arguments:
         opts['force'] = True
 
@@ -358,6 +416,11 @@ def callapi(verb, uri, opts):
 
     except requests.exceptions.ConnectionError as e:
         printerror(e)
+
+    if resp.status_code == 409:
+        print(resp.json()['message'].replace('. Override with the option \'?force=true\'. ', '. '))
+        print(u'Force it with \'-F\' switch')
+        sys.exit(2)
     return resp
 
 
