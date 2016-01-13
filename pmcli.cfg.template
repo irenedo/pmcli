@@ -3,8 +3,18 @@
 # Marathon server DNS name or IP
 host = [marathon Address]
 
-# Marathon port
+# Marathon port. (default: 8080)
 port = [Port]
+
+# Use SSL. 1 -> True (default: 0)
+ssl = [1:0]
+
+# Verify SSL certificate. 1 -> True, 0 -> False (default: 1)
+# Disable SSL certificate verification IS NOT RECOMMENDED
+verifyssl = 1
+
+# Path to SSL certificate. 1 in case of no certificate verification
+sslcert = [certificate file]
 
 # Marathon username (in case of authentication)
 user = [Username]
@@ -12,7 +22,7 @@ user = [Username]
 # Maraton password (in case of authentication)
 password = [Password]
 
-# Output format
+# Output format (default: jsonpp)
 #	human  (simplified columns)
 #	json   (json on one line)
 #	jsonpp (json pretty printed, default)
@@ -23,7 +33,7 @@ format = [Output Format]
 proxy = [Proxy Address]
 
 # HTTPS proxy addres. Format https://<name>:<port>
-proxys = [SSL Proxy Address]
+sproxy = [SSL Proxy Address]
 
-# Timeout for API connections, in seconds
+# Timeout for API connections (default: 60)
 timeout = [Timeout]

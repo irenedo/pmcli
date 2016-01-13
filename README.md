@@ -17,11 +17,23 @@ Just copy 'pmcli' file under any of your system's paths
 You can supply a configuration file from the CLI or use the default one under ~./.pmcli.cfg. The format is:
 
 ```
+[default]
+
 # Marathon server DNS name or IP
 host = [marathon Address]
 
-# Marathon port
+# Marathon port. (default: 8080)
 port = [Port]
+
+# Use SSL. 1 -> True (default: 0)
+ssl = [1:0]
+
+# Verify SSL certificate. 1 -> True, 0 -> False (default: 1)
+# Disable SSL certificate verification IS NOT RECOMMENDED
+verifyssl = 1
+
+# Path to SSL certificate. 1 in case of no certificate verification
+sslcert = [certificate file]
 
 # Marathon username (in case of authentication)
 user = [Username]
@@ -29,7 +41,7 @@ user = [Username]
 # Maraton password (in case of authentication)
 password = [Password]
 
-# Output format
+# Output format (default: jsonpp)
 #       human  (simplified columns)
 #       json   (json on one line)
 #       jsonpp (json pretty printed, default)
@@ -40,16 +52,17 @@ format = [Output Format]
 proxy = [Proxy Address]
 
 # HTTPS proxy addres. Format https://<name>:<port>
-proxys = [SSL Proxy Address]
+sproxy = [SSL Proxy Address]
 
-# Timeout for API connections, in seconds
+# Timeout for API connections (default: 60)
 timeout = [Timeout]
-```
-You can have different marathon hosts (profiles) in the file and specify the one to use from the CLI with the '-p' switch
 
 ```
 [default]
 host = <marathonhost1>
+ssl = <ssl1>
+verifyssl = <verifyssl1>
+cert = <cert1>
 user = <username1>
 password = <password1>
 format = <output format1>
@@ -60,6 +73,9 @@ timeout = <timeout2>
 
 [profile2]
 host = <marathonhost2>
+ssl = <ssl2>
+verifyssl = <verifyssl2>
+cert = <cert2>
 user = <username2>
 password = <password2>
 format = <output format2>
@@ -80,7 +96,7 @@ pmcli <flags...> [section] [action]
     │      ├─ showversion [appid] [versionid] - show config and status of 'appid' and 'versionid'
     │      ├─ create [jsonfile]               - deploy application defined in jsonfile
     │      ├─ update [appid] [jsonfile]       - update application 'appid' as defined in jsonfile
-    │      ├─ change [opt] [appid] [value]    - change appid option 'opt' to 'value'
+    │      ├─ change [appid] [opt] [value]    - change appid option 'opt' to 'value'
     │      ├─ scale [appid] [N]               - Scale application 'appid' to have N instances
     │      ├─ restart [appid]                 - restart app of 'appid'
     │      ├─ destroy [appid]                 - destroy and remove all instances of 'appid'
@@ -131,13 +147,19 @@ pmcli <flags...> [section] [action]
   -t [timeout] Timeout for connections
   -x [http proxy] proxy address
   -X [https proxy] SSL proxy address
+  -S Use SSL
+  -N Do not verify SSL
+  -C Certificate file (pem format)
   -F Force operation
 
 ```
 
 ## TO DO
 
-- Support SSL
+- Option to work without config file, just with command arguments
+- Option to filter output
+- Show "force" message more user friendly
+- Unicode support
 - Share it from a docker container
 - Test it with python 3.x
 - Test it in other platform different than linux
