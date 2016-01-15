@@ -36,7 +36,6 @@ def printpart(text, indent):
     :param indent: Indentation
     :return: text without the first 'ident' characters from every line
     """
-
     res = u''
     for line in text.split('\n'):
         res = res + line[indent:] + '\n'
@@ -138,7 +137,8 @@ def getconfig(arguments, outputtext):
     # dictionary with all parameters of configuration
     opts = {'host': ' ', 'username': '', 'password': '', 'outputformat': 'jsonpp', 'file': False,
             'outputfile': '', 'port': '8080', 'force': False, 'proxy': '', 'sproxy': '',
-            'timeout': 60, 'ssl': False, 'verifyssl': True, 'cert': ''}
+            'timeout': 60, 'ssl': False, 'verifyssl': True, 'cert': '', 'eventsfiltered': {'type': True, 'value': True},
+            'filter_type': {'option': '', 'value': ''}, 'filter_event': []}
 
     # Get config file and check if exists and is readable
     configfile = os.path.expanduser("~/.pmcli.cfg")
@@ -296,6 +296,30 @@ def getconfig(arguments, outputtext):
     if '-F' in arguments:
         opts['force'] = True
 
+    # Get filter for 'pmcli marathon events'
+    if 'events' in arguments:
+        filters = ''
+        index = arguments.index('events')
+        try:
+            filters = arguments[index+1]
+        except IndexError:
+            opts['eventsfiltered']['type'] = False
+            opts['eventsfiltered']['value'] = False
+
+        # checl if 'marathon events' has a correct argument and store the value for the filter
+        if opts['eventsfiltered']['type'] and opts['eventsfiltered']['value']:
+            if re.match(r'^e\[[0-9a-zA-Z_\-]+(,[0-9a-zA-Z_\-]+)*\]', filters, ):
+                opts['filter_event'] = filters[2:-1].split(',')
+                opts['eventsfiltered']['value'] = False
+            elif re.match(r'^a\[[0-9a-zA-Z_\-]*:[0-9a-zA-Z_/\.\-]*\]', filters, ):
+                opts['filter_type']['option'] = filters.split(':')[0][2:]
+                opts['filter_type']['value'] = filters.split(':')[1][:-1]
+                opts['eventsfiltered']['type'] = False
+            else:
+                print(u'Wrong filter type syntax: \'' + filters + u'\'')
+                printpart(usage[5], 6)
+                sys.exit(2)
+
     return opts
 
 
@@ -413,6 +437,18 @@ def callapi(verb, uri, opts):
                                    proxies={"http": opts['proxy'], "https": opts['sproxy'], },
                                    timeout=float(opts['timeout']),
                                    verify=opts['cert'])
+        elif verb['verb'] == 'getstream':
+            headers = {'Accept': 'text/event-stream'}
+            resp = requests.get(proto + opts['host'] + ':' + opts['port'] + '/v2/events',
+                                auth=(opts['username'], opts['password']),
+                                headers=headers,
+                                stream=True,
+                                proxies={"http": opts['proxy'], "https": opts['sproxy'], },
+                                timeout=float(opts['timeout']),
+                                verify=opts['cert'])
+        else:
+            print(u'unknown http verb')
+            sys.exit(2)
 
     except requests.exceptions.ConnectionError as e:
         printerror(e)
@@ -869,29 +905,58 @@ def attachstream(opts):
     Pings marathon to test if it's alive
     :param opts: options used to connect
     """
+    oline = {'event': '', 'data': ''}
     resp = ''
     try:
-        headers = {'Accept': 'text/event-stream'}
-        if opts['ssl']:
-            proto = 'https://'
-        else:
-            proto = 'http://'
-
-        resp = requests.get(proto + opts['host'] + ':' + opts['port'] + '/v2/events',
-                            auth=(opts['username'], opts['password']),
-                            headers=headers,
-                            stream=True,
-                            proxies={"http": opts['proxy'], "https": opts['sproxy'], },
-                            timeout=float(opts['timeout']),
-                            verify=opts['cert'])
+        resp = callapi({'verb': 'getstream'}, '/v2/events', opts)
         try:
+            # every event is composed by twi lines: first one begins with "event" and second one with "data"
+            e = re.compile(r'^event: .*')
+            d = re.compile(r'^data: .*')
             for line in resp.iter_lines(chunk_size=128):
-                if line:
-                    if "data:" in line:
-                        output = line.split("data: ")[1]
-                        parsetext(json.loads(output), output, opts['outputformat'])
+                # check if it's an event
+                if e.match(line):
+                    # Must by filtered by event name?
+                    if opts['eventsfiltered']['type']:
+                        # If event is in list of event to filter
+                        if line.split(':')[1][1:] in opts['filter_event']:
+                            oline['event'] = line
+                            oline['data'] = ''
+                        # if not is event list to filter, reset both fields
+                        else:
+                            oline['event'] = ''
+                            oline['data'] = ''
+                    # If result must not be filtered, show it
                     else:
-                        print line
+                        oline['event'] = line
+                        oline['data'] = ''
+                # check if it's a data line
+                if d.match(line):
+                    # if we receive a data line without a previous event, reset it
+                    if not oline['event']:
+                        oline['data'] = ''
+                    else:
+                        data = line.split("data: ")[1]
+                        # Must by filtered by field?
+                        if opts['eventsfiltered']['value']:
+                            # If data contains the 'option' field and is equal to 'value' in arguments
+                            if opts['filter_type']['option'] in  json.loads(data).keys() \
+                                    and json.loads(data)[opts['filter_type']['option']] == opts['filter_type']['value']:
+                                oline['data'] = data
+                            # if not, reset both fields
+                            else:
+                                oline['event'] = ''
+                                oline['data'] = ''
+                        # If not filtered, store the data line
+                        else:
+                            oline['data'] = data
+
+                if oline['event'] and oline['data']:
+                    print(oline['event'])
+                    parsetext(json.loads(oline['data']), oline['data'], opts['outputformat'])
+                    oline['event'] = ''
+                    oline['data'] = ''
+
         except KeyboardInterrupt:
             resp.close()
             sys.exit(0)
@@ -971,12 +1036,14 @@ subs = u"""
 marathon = u"""
     │
     └─ marathon
-              └─┬─ leader    - (v0.7.0 and above) get the current Marathon leader
-                ├─ abdicate  - (v0.7.0 and above) force the current leader to relinquish control
-                ├─ ping      - ping Marathon master host[s]
-                ├─ events    - (v0.9.0 and above) Attach to the events stream (exit with [Ctrl + C])
-                ├─ info      - (v0.7.0 and above) get info about marathon instance
-                └─ metrics   - get marathon metrics"""
+              └─┬─ leader          - (v0.7.0 and above) get the current Marathon leader
+                ├─ abdicate        - (v0.7.0 and above) force the current leader to relinquish control
+                ├─ ping            - ping Marathon master host[s]
+                ├─ events [filter] - (v0.9.0 and above) Attach to the events stream (exit with [Ctrl + C])
+                │                    filter (optional):   e[[comma separated events]]
+                │                                         a[[id]:[value]]
+                ├─ info            - (v0.7.0 and above) get info about marathon instance
+                └─ metrics         - get marathon metrics"""
 
 flags = u"""
  Flags
@@ -1263,7 +1330,7 @@ elif 'marathon' in sys.argv:
         checkargs(argum, 0, 5)
         pingmaster(options)
     elif argum[0].lower() == 'events':
-        checkargs(argum, 0, 5)
+        checkargs(argum, 1, 5)
         attachstream(options)
     elif argum[0].lower() == 'info':
         checkargs(argum, 0, 5)

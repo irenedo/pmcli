@@ -56,6 +56,8 @@ sproxy = [SSL Proxy Address]
 
 # Timeout for API connections (default: 60)
 timeout = [Timeout]
+```
+You can have different marathon hosts (profiles) in the file and specify the one to use from the CLI with the '-p' switch
 
 ```
 [default]
@@ -157,11 +159,12 @@ pmcli <flags...> [section] [action]
 ## TO DO
 
 - Option to work without config file, just with command arguments
-- Option to filter output
+- Option to filter event stream with keys with more than 2 levels depth
 - Unicode support
 - Share it from a docker container
 - Test it with python 3.x
 - Test it in other platform different than linux
+- Extend documentation with examples
 
 I'm opened to any suggestion
 
