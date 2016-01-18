@@ -4,13 +4,13 @@ Multi-platform Marathon CLI written in python.
 
 ## What’s new in pmcli 1.1
 
-Attach to events stream with filter options
-SSL support
-Manage Subscriptions
-Native proxy support
-User defined timeout to API calls
-Option to manually reset applications launch delay
-Bug fixed and code cleaning 
+- Attach to events stream with filter options
+- SSL support
+- Manage Subscriptions
+- Native proxy support
+- User defined timeout to API calls
+- Option to manually reset applications launch delay
+- Bug fixed and code cleaning 
 
 ## Installation
 
