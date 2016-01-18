@@ -245,16 +245,19 @@ event: status_update_event
 
 Another interesting marathon's functionality it's to send events to specific URL to advise system's about applications changes. This allow us to dynamically reconfigure our systems very time a change occurs within applications in marathon. For example a "scale" event can talk to a front end proxy to reconfigure for the new web servers in marathon.
 
-This URL can be now manage from pmcli if marathon daemon is working with callback support  ```
+This URL can be now manage from pmcli if marathon daemon is working with callback support  
+```
 $ pmcli subs register http://proxyp_ip/events
 { "eventType": "subscribe_event",
 "clientIp": "92.186.41.60",
 "timestamp": "2016-01-18T12:29:46.693Z",
 "callbackUrl": "http://proxyp_ip/events"}
-
+```
+```
 $ pmcli subs list
 { "callbackUrls": [ "http://proxyp_ip/events" ]}
-
+```
+```
 $ pmcli subs unregister http://proxyp_ip/events
 Do you really want to unregister 'http://proxyp_ip/events' ? (y/N)y{ "eventType": "unsubscribe_event",
 "clientIp": "92.186.41.60",
