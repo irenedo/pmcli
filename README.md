@@ -251,12 +251,10 @@ $ pmcli subs register http://proxyp_ip/events
 "clientIp": "92.186.41.60",
 "timestamp": "2016-01-18T12:29:46.693Z",
 "callbackUrl": "http://proxyp_ip/events"}
-```
-```
+
 $ pmcli subs list
 { "callbackUrls": [ "http://proxyp_ip/events" ]}
-```
-```
+
 $ pmcli subs unregister http://proxyp_ip/events
 Do you really want to unregister 'http://proxyp_ip/events' ? (y/N)y{ "eventType": "unsubscribe_event",
 "clientIp": "92.186.41.60",
