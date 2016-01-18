@@ -983,6 +983,7 @@ def attachstream(opts):
                 if oline['event'] and oline['data']:
                     print(oline['event'])
                     parsetext(json.loads(oline['data']), oline['data'], opts['outputformat'])
+                    print(u'')
                     oline['event'] = ''
                     oline['data'] = ''
 
