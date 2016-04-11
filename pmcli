@@ -135,7 +135,7 @@ def getconfig(arguments, outputtext):
     :param outputtext: usage text to print output
     """
     # dictionary with all parameters of configuration
-    opts = {'host': ' ', 'username': '', 'password': '', 'outputformat': 'jsonpp', 'file': False,
+    opts = {'host': ' ', 'path' : '', 'username': '', 'password': '', 'outputformat': 'jsonpp', 'file': False,
             'outputfile': '', 'port': '8080', 'force': False, 'proxy': '', 'sproxy': '',
             'timeout': 60, 'ssl': '0', 'verifyssl': True, 'cert': '', 'eventsfiltered': {'type': True, 'value': True},
             'filter_type': {'option': '', 'value': ''}, 'filter_event': []}
@@ -179,6 +179,7 @@ def getconfig(arguments, outputtext):
 
             # read the rest options
             try:
+                opts['path'] = cfg.get(mesosprofile, 'path')
                 opts['username'] = cfg.get(mesosprofile, 'user')
                 opts['password'] = cfg.get(mesosprofile, 'password')
                 opts['outputformat'] = cfg.get(mesosprofile, 'format')
@@ -441,34 +442,34 @@ def callapi(verb, uri, opts):
 
     try:
         if verb['verb'] == 'get':
-            resp = requests.get(proto + opts['host'] + ':' + opts['port'] + uri + f,
+            resp = requests.get(proto + opts['host'] + ':' + opts['port'] + opts['path'] + uri + f,
                                 auth=(opts['username'], opts['password']),
                                 proxies={"http": opts['proxy'], "https": opts['sproxy'], },
                                 timeout=float(opts['timeout']),
                                 verify=opts['cert'])
         elif verb['verb'] == 'put':
-            resp = requests.put(proto + opts['host'] + ':' + opts['port'] + uri + f,
+            resp = requests.put(proto + opts['host'] + ':' + opts['port'] + opts['path'] + uri + f,
                                 data=verb['content'],
                                 auth=(opts['username'], opts['password']),
                                 proxies={"http": opts['proxy'], "https": opts['sproxy'], },
                                 timeout=float(opts['timeout']),
                                 verify=opts['cert'])
         elif verb['verb'] == 'post':
-            resp = requests.post(proto + opts['host'] + ':' + opts['port'] + uri + f,
+            resp = requests.post(proto + opts['host'] + ':' + opts['port'] + opts['path'] + uri + f,
                                  data=verb['content'],
                                  auth=(opts['username'], opts['password']),
                                  proxies={"http": opts['proxy'], "https": opts['sproxy'], },
                                  timeout=float(opts['timeout']),
                                  verify=opts['cert'])
         elif verb['verb'] == 'delete':
-            resp = requests.delete(proto + opts['host'] + ':' + opts['port'] + uri + f,
+            resp = requests.delete(proto + opts['host'] + ':' + opts['port'] + opts['path'] + uri + f,
                                    auth=(opts['username'], opts['password']),
                                    proxies={"http": opts['proxy'], "https": opts['sproxy'], },
                                    timeout=float(opts['timeout']),
                                    verify=opts['cert'])
         elif verb['verb'] == 'getstream':
             headers = {'Accept': 'text/event-stream'}
-            resp = requests.get(proto + opts['host'] + ':' + opts['port'] + '/v2/events',
+            resp = requests.get(proto + opts['host'] + ':' + opts['port'] + opts['path'] + '/v2/events',
                                 auth=(opts['username'], opts['password']),
                                 headers=headers,
                                 stream=True,
