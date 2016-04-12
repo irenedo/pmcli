@@ -6,6 +6,9 @@ host = [marathon Address]
 # Marathon port. (default: 8080)
 port = [Port]
 
+# Marathon path. (default: '')
+path = ''
+
 # Use SSL. 1 -> True (default: 0)
 ssl = [1:0]
 
