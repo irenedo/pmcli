@@ -18,7 +18,7 @@ __copyright__ = "GPL"
 
 def checkargs(call, number, section):
     """
-    Check if call to 'pmcli <call> <arguments>' doesn't exceed the number of arguments
+    Checks if call to 'pmcli <call> <arguments>' doesn't exceed the number of arguments
     :param call: list containing the arguments
     :param number: number of arguments the call must have
     :param section: usage section to show
@@ -72,11 +72,11 @@ def printhuman(dictionary, ident='', braces=1):
     """
     Prints the result in human readable format
     :param dictionary: output message
-    :param ident: indentantion
+    :param ident: Indentation
     :param braces: number of braces to multiple results section
     """
     tempdict = {}
-    # Deployment list comes in a list instead a dictionary. Must be converted before printing
+    # Deployment list comes in a list instead of a dictionary. Must be converted before printing
     if isinstance(dictionary, list):
         i = 0
         for item in dictionary:
@@ -112,7 +112,7 @@ def printhuman(dictionary, ident='', braces=1):
 def checkfile(path):
     """
     Checks if a file exists and is readable
-    :param path: path to the file
+    :param path: Path to the file
     :return: True if exists and is readable
     """
     try:
@@ -130,7 +130,7 @@ def checkfile(path):
 
 def getconfig(arguments, outputtext):
     """
-    Gets the arguments options and puts it in the opts dictionary
+    Gets the arguments and puts it in the 'opts' dictionary
     :param arguments: arguments used to call pmcli
     :param outputtext: usage text to print output
     """
@@ -138,7 +138,7 @@ def getconfig(arguments, outputtext):
     opts = {'host': ' ', 'username': '', 'password': '', 'outputformat': 'jsonpp', 'file': False,
             'outputfile': '', 'port': '8080', 'force': False, 'proxy': '', 'sproxy': '',
             'timeout': 60, 'ssl': '0', 'verifyssl': True, 'cert': '', 'eventsfiltered': {'type': True, 'value': True},
-            'filter_type': {'option': '', 'value': ''}, 'filter_event': []}
+            'filter_type': {'option': '', 'value': ''}, 'filter_event': [], 'yes': False}
 
     if '-usage' in arguments:
         printusage(outputtext)
@@ -167,17 +167,17 @@ def getconfig(arguments, outputtext):
             cfg = ConfigParser.ConfigParser()
             cfg.read(configfile)
 
-            # read hostname from config file. Only host field is required
+            # read hostname from config file. Only 'host' field is required
             try:
                 opts['host'] = cfg.get(mesosprofile, 'host')
             except ConfigParser.NoOptionError:
                 print(u'no \'host\' section found in config file')
                 sys.exit(2)
             except ConfigParser.NoSectionError:
-                print(u'Profile \"' + mesosprofile.encode('utf-8') + u'\" doesn\'t exist in file ' + configfile)
+                print(u'Profile \"' + mesosprofile + u'\" doesn\'t exist in file ' + configfile)
                 sys.exit(2)
 
-            # read the rest options
+            # read the remaining options
             try:
                 opts['username'] = cfg.get(mesosprofile, 'user')
                 opts['password'] = cfg.get(mesosprofile, 'password')
@@ -200,11 +200,11 @@ def getconfig(arguments, outputtext):
                 # Whit the rest of option, doesn't matter if not exist
                 pass
             except ConfigParser.NoSectionError:
-                print(u'Profile \"' + mesosprofile.encode('utf-8') + u'\" doesn\'t exist in file ' + configfile)
+                print(u'Profile \"' + mesosprofile + u'\" doesn\'t exist in file ' + configfile)
                 sys.exit(2)
 
     # Hostname it's the only argument required
-    # get hostname from arguments and overrides the config file one in that case
+    # get hostname from arguments and overrides the config file's one in that case
     if '-h' in arguments:
         index = arguments.index('-h')
         opts['host'] = arguments[index+1]
@@ -213,18 +213,18 @@ def getconfig(arguments, outputtext):
             print(u'No hostname or config file supplied')
             sys.exit(2)
 
-    # get username and password from arguments and overrides the config file ones in that case
+    # get username and password from arguments and overrides the config file's ones in that case
     if '-u' in arguments:
         index = arguments.index('-u')
         userpass = arguments[index+1]
         try:
             opts['username'], opts['password'] = userpass.split(':')
         except:
-            print(u'there was some error reading you username and password')
+            print(u'there was some error reading your username and password')
             printpart(outputtext[6], 0)
             sys.exit(2)
 
-    # get output format from arguments and overrides the config file one in that case ...
+    # get output format from arguments and overrides the config file's one in that case ...
     if '-f' in arguments:
         index = arguments.index('-f')
         opts['outputformat'] = arguments[index+1]
@@ -240,7 +240,7 @@ def getconfig(arguments, outputtext):
         opts['file'] = True
         opts['outputfile'] = arguments[index+1]
 
-    # get the port number from arguments and overrides the config file one in that case ...
+    # get the port number from arguments and overrides the config file's one in that case ...
     if '-P' in arguments:
         index = arguments.index('-P')
         opts['port'] = arguments[index+1]
@@ -250,7 +250,7 @@ def getconfig(arguments, outputtext):
         printpart(outputtext[6], 0)
         sys.exit(2)
 
-    # get the timeout from arguments and overrides the config file one in that case ...
+    # get the timeout from arguments and overrides the config file's one in that case ...
     if '-t' in arguments:
         index = arguments.index('-t')
         opts['timeout'] = arguments[index+1]
@@ -260,7 +260,7 @@ def getconfig(arguments, outputtext):
         printpart(outputtext[6], 0)
         sys.exit(2)
 
-    # get the proxy from arguments and overrides the config file one in that case ...
+    # get the proxy from arguments and overrides the config file's one in that case ...
     if '-x' in arguments:
         index = arguments.index('-x')
         opts['proxy'] = arguments[index+1]
@@ -275,7 +275,7 @@ def getconfig(arguments, outputtext):
             printpart(outputtext[6], 0)
             sys.exit(2)
 
-    # get the https proxy from arguments and overrides the config file one in that case ...
+    # get the https proxy from arguments and overrides the config file's one in that case ...
     if '-X' in arguments:
         index = arguments.index('-X')
         opts['sproxy'] = arguments[index+1]
@@ -303,7 +303,7 @@ def getconfig(arguments, outputtext):
             print(u'\'ssl\' option in config file must be 1:Enable, 0:Disabled')
             sys.exit(2)
 
-    # get the certificate from arguments and overrides the config file one in that case ...
+    # get the certificate from arguments and overrides the config file's one in that case ...
     usesslfile = False
     if opts['cert']:
         usesslfile = True
@@ -324,6 +324,10 @@ def getconfig(arguments, outputtext):
     # Check if we must force marathon API operations. This option can be only used from command line
     if '-F' in arguments:
         opts['force'] = True
+
+    # Check if we assume 'yes' to any question from pmcli
+    if '-y' in arguments:
+        opts['yes'] = True
 
     # Get filter for 'pmcli marathon events'
     if 'events' in arguments:
@@ -354,10 +358,10 @@ def getconfig(arguments, outputtext):
 
 def parsetext(jsonstring, rawstring, o):
     """
-    prints the result json or raw text to the display
+    Prints the result in json or raw text to stdin
     :param jsonstring: string in json format
     :param rawstring: string in raw format
-    :param o: option chosen to parse the result
+    :param o: Option chosen to parse the result
     :return:
     """
     if o == 'json':
@@ -381,8 +385,8 @@ def parsetext(jsonstring, rawstring, o):
 def printoutput(result, outputformat, tofile, ofile):
     """
     Prints the output from the call to marathon
-    :param result: result from the request call
-    :param outputformat: format to use to print it
+    :param result: Result from the request call
+    :param outputformat: format to usei, to print it
     :param tofile: boolean. Says if the output must be a file
     :param ofile: File to write the result
     """
@@ -413,6 +417,10 @@ def printoutput(result, outputformat, tofile, ofile):
 
 
 def printerror(error):
+    """
+    Just prints an error to stdin
+    :param error: Error text returned from the API call
+    """
     print(u'Error connecting to host')
     try:
         print(error[0][1])
@@ -423,11 +431,11 @@ def printerror(error):
 
 def callapi(verb, uri, opts):
     """
-    Makes a call to a given API URL with the guiven options
-    :param verb: http verbs
+    Makes a call to an API URL with the given options
+    :param verb: http verb to use ('get','put','post','delte','getstream')
     :param uri: api uri call
     :param opts: options
-    :return: response
+    :return: response from the call
     """
     resp = ''
     if opts['ssl']:
@@ -562,11 +570,10 @@ def createapp(filename, opts):
 
 def destroyapp(appid, opts):
     """
-    Destroys a marathon app with its given appid.
+    Destroys a marathon app using its appid.
         DELETE /v2/apps/{appId}
     :param appid: app Id
     :param opts: options used to connect and print the result
-    :return:
     """
     if listappid(appid, opts):
         print(u'Do you really want to destroy ' + appid + u' application? (y/N)')
@@ -593,7 +600,7 @@ def restartapp(appid, opts):
 
 def updateappid(appid, jfile, opts):
     """
-    Changes config to application with its appid with a json file
+    Changes config of an application from its appid with a json file
         PUT /v2/apps/{appId}
     :param appid: appid of application to update
     :param jfile: json file with the updated configuration of appid
@@ -650,7 +657,7 @@ def changeoption(appid, option, value, opts):
         v = value
 
     # Confirm change
-    print(u'Option: \"' + option + u'\"\nOld value: ' + str(buff[option]).encode('utf-8') +
+    print(u'Option: \"' + option + u'\"\nOld value: ' + str(buff[option]) +
           u'\nNew Value :' + value.decode('utf-8') + u'\nDo you really want to change it? (y/N)')
     chose = getch()
     if chose not in ['y', 'Y']:
@@ -673,7 +680,7 @@ def listtasks(opts):
 
 def listtaskid(appid, opts):
     """
-    List all tasks of appid
+    List all tasks of an application from its appid
         GET /v2/apps/{appId}/tasks
     :param appid: Application id
     :param opts: options used to connect and print the result
@@ -684,7 +691,7 @@ def listtaskid(appid, opts):
 
 def killtasks(appid, opts):
     """
-    kill all tasks from appid
+    kill all tasks of an application from its appid
         DELETE /v2/apps/{appId}/tasks
     :param appid: app id
     :param opts: options used to connect and print the result
@@ -700,7 +707,7 @@ def killtasks(appid, opts):
 
 def killtaskid(appid, taskid, opts):
     """
-    kill taskid of appid
+    kill a task from its taskid of appid
         DELETE /v2/apps/{appId}/tasks/{taskId}
     :param appid: application Id
     :param taskid: Task Id
@@ -717,7 +724,7 @@ def killtaskid(appid, taskid, opts):
 
 def listqueue(opts):
     """
-    List content of teh staging queue
+    List content of the staging queue
         GET /v2/queue
     :param opts: options used to connect and print the result
     """
@@ -750,7 +757,7 @@ def listgroups(opts):
 
 def listgroupid(groupid, opts):
     """
-    lists groupid config
+    lists a group config from its groupid
         GET /v2/groups/{groupId}
     :param groupid: groupid to show config
     :param opts: options used to connect and print the result
@@ -766,7 +773,7 @@ def listgroupid(groupid, opts):
 
 def creategroup(filename, opts):
     """
-    Create a group from a json file
+    Creates a group from a json file
         POST /v2/groups
     :param filename: file with the group's description
     :param opts: options used to connect and print the result
@@ -854,7 +861,7 @@ def destroydeployment(deployid, opts):
 
 def listsubscriptions(opts):
     """
-    List all event subscriber callback URLs.
+    Lists all event subscriber callback URLs.
         GET /v2/eventSubscriptions
     :param opts: options used to connect and print the result
     """
@@ -864,7 +871,7 @@ def listsubscriptions(opts):
 
 def registersubscription(url, opts):
     """
-    Register a callback URL as an event subscriber.
+    Registers a callback URL as an event subscriber.
         POST /v2/eventSubscriptions
     :param url: URL to which events should be posted
     :param opts: options used to connect and print the result
@@ -880,7 +887,7 @@ def registersubscription(url, opts):
 
 def destroysubscription(url, opts):
     """
-    Unregister a callback URL from the event subscribers list.
+    Unregisters a callback URL from the event subscribers list.
         DELETE /v2/eventSubscriptions
     :param url: URL passed when the event subscription was created.
     :param opts: options used to connect and print the result
@@ -939,7 +946,7 @@ def attachstream(opts):
     try:
         resp = callapi({'verb': 'getstream'}, '/v2/events', opts)
         try:
-            # every event is composed by twi lines: first one begins with "event" and second one with "data"
+            # every event is composed by two lines: first one begins with "event" and second one with "data"
             e = re.compile(r'^event: .*')
             d = re.compile(r'^data: .*')
             for line in resp.iter_lines(chunk_size=128):
